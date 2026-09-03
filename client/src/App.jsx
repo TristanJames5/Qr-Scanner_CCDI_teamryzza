@@ -13,6 +13,7 @@ import { InstructorDashboard } from './pages/instructor/InstructorDashboard';
 import { LiveSessionView } from './pages/instructor/LiveSessionView';
 import { SectionDetailsPage } from './pages/instructor/SectionDetailsPage';
 import { PatternAlertsPage } from './pages/instructor/PatternAlertsPage';
+import { AttendanceInsightsPage } from './pages/instructor/AttendanceInsightsPage';
 import { AdminDashboard } from './pages/admin/AdminDashboard';
 import { ManageUsersPage } from './pages/admin/ManageUsersPage';
 import { ManageSectionsPage } from './pages/admin/ManageSectionsPage';
@@ -101,6 +102,14 @@ export const App = () => {
             element={
               <ProtectedRoute allowedRoles={['instructor', 'admin']}>
                 <PatternAlertsPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/instructor/analytics"
+            element={
+              <ProtectedRoute allowedRoles={['instructor', 'admin']}>
+                <AttendanceInsightsPage />
               </ProtectedRoute>
             }
           />

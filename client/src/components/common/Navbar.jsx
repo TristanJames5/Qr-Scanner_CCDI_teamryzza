@@ -11,7 +11,8 @@ import {
   AlertTriangle, 
   Calendar, 
   History,
-  Scan
+  Scan,
+  BarChart3
 } from 'lucide-react';
 
 export const Navbar = () => {
@@ -96,6 +97,15 @@ export const Navbar = () => {
                 >
                   <LayoutDashboard className="w-4 h-4" />
                   <span>My Sections</span>
+                </Link>
+                <Link
+                  to="/instructor/analytics"
+                  className={`flex items-center space-x-2 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
+                    location.pathname.startsWith('/instructor/analytics') ? 'bg-blue-600/20 text-blue-400 border border-blue-500/30' : 'text-slate-300 hover:text-white hover:bg-slate-800/60'
+                  }`}
+                >
+                  <BarChart3 className="w-4 h-4 text-blue-400" />
+                  <span>Analytics</span>
                 </Link>
                 <Link
                   to="/instructor/patterns"

@@ -4,7 +4,11 @@ import {
   getSectionPatternAlerts, 
   getSectionAnalytics, 
   getStudentAttendanceHistory, 
-  getAdminGlobalStats 
+  getAdminGlobalStats,
+  getAttendanceInsights,
+  getRecoveryTracker,
+  getAttendanceReports,
+  generateReportCSV
 } from '../services/analytics.js';
 
 const router = express.Router();
@@ -66,6 +70,51 @@ router.get('/admin/global', authenticate, authorize('admin'), (req, res) => {
     res.json(stats);
   } catch (err) {
     res.status(500).json({ error: 'Failed to fetch global stats: ' + err.message });
+  }
+});
+
+// 5. Attendance Insights for a section (weekly trends, pie, top sessions)
+router.get('/section/:id/insights', authenticate, authorize('instructor', 'admin'), (req, res) => {
+  try {
+    const data = getAttendanceInsights(req.params.id);
+    if (!data) return res.status(404).json({ error: 'Section not found' });
+    res.json(data);
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to compute insights: ' + err.message });
+  }
+});
+
+// 6. Recovery Tracker for a section
+router.get('/section/:id/recovery', authenticate, authorize('instructor', 'admin'), (req, res) => {
+  try {
+    const data = getRecoveryTracker(req.params.id);
+    res.json(data);
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to compute recovery data: ' + err.message });
+  }
+});
+
+// 7. Monthly attendance reports summary
+router.get('/reports', authenticate, authorize('instructor', 'admin'), (req, res) => {
+  try {
+    const { sectionId, month, year } = req.query;
+    const data = getAttendanceReports({ sectionId, month, year });
+    res.json(data);
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to fetch reports: ' + err.message });
+  }
+});
+
+// 8. Export reports as CSV download
+router.get('/reports/export-csv', authenticate, authorize('instructor', 'admin'), (req, res) => {
+  try {
+    const { sectionId, month, year } = req.query;
+    const result = generateReportCSV({ sectionId, month, year });
+    res.setHeader('Content-Type', 'text/csv');
+    res.setHeader('Content-Disposition', `attachment; filename="${result.filename}"`);
+    res.send(result.content);
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to generate report CSV: ' + err.message });
   }
 });
 
