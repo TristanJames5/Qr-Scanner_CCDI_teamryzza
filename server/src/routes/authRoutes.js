@@ -83,4 +83,86 @@ router.get('/demo-accounts', (req, res) => {
   res.json(accounts);
 });
 
+// -----------------------------------------------------------------
+// Student self-registration (public)
+// -----------------------------------------------------------------
+router.post('/register/student', async (req, res) => {
+  try {
+    const { name, id_number, email, password } = req.body;
+
+    if (!name || !id_number || !email || !password) {
+      return res.status(400).json({ error: 'All fields are required.' });
+    }
+    if (password.length < 6) {
+      return res.status(400).json({ error: 'Password must be at least 6 characters.' });
+    }
+
+    // Check for duplicates
+    const existing = db.prepare(
+      'SELECT id FROM users WHERE LOWER(email) = LOWER(?) OR LOWER(id_number) = LOWER(?)'
+    ).get(email.trim(), id_number.trim());
+
+    if (existing) {
+      return res.status(409).json({ error: 'A user with that Student ID or email already exists.' });
+    }
+
+    const password_hash = bcrypt.hashSync(password, 10);
+
+    db.prepare(
+      'INSERT INTO users (name, id_number, email, password_hash, role) VALUES (?, ?, ?, ?, ?)'
+    ).run(name.trim(), id_number.trim(), email.trim().toLowerCase(), password_hash, 'student');
+
+    return res.status(201).json({ message: 'Student account created successfully.' });
+  } catch (err) {
+    return res.status(500).json({ error: 'Server error during registration: ' + err.message });
+  }
+});
+
+// -----------------------------------------------------------------
+// Staff self-registration (invite-token-gated)
+// -----------------------------------------------------------------
+router.post('/register/staff', async (req, res) => {
+  try {
+    const { name, email, role, department, password, invite_token } = req.body;
+    const STAFF_INVITE_TOKEN = process.env.STAFF_INVITE_TOKEN || 'ccdi_staff_2026';
+
+    if (!name || !email || !role || !department || !password || !invite_token) {
+      return res.status(400).json({ error: 'All fields are required.' });
+    }
+
+    // Prevent students from using this endpoint to escalate roles
+    if (!['instructor', 'admin'].includes(role)) {
+      return res.status(403).json({ error: 'Invalid role. Only instructor or admin roles are allowed here.' });
+    }
+
+    if (password.length < 6) {
+      return res.status(400).json({ error: 'Password must be at least 6 characters.' });
+    }
+
+    // Validate invite token
+    if (invite_token.trim() !== STAFF_INVITE_TOKEN) {
+      return res.status(403).json({ error: 'Invalid invite token. Please contact your administrator.' });
+    }
+
+    // Check for duplicate email
+    const existing = db.prepare(
+      'SELECT id FROM users WHERE LOWER(email) = LOWER(?)'
+    ).get(email.trim());
+
+    if (existing) {
+      return res.status(409).json({ error: 'A user with that email already exists.' });
+    }
+
+    const password_hash = bcrypt.hashSync(password, 10);
+
+    db.prepare(
+      'INSERT INTO users (name, email, password_hash, role, department) VALUES (?, ?, ?, ?, ?)'
+    ).run(name.trim(), email.trim().toLowerCase(), password_hash, role, department.trim());
+
+    return res.status(201).json({ message: 'Staff account created successfully.' });
+  } catch (err) {
+    return res.status(500).json({ error: 'Server error during registration: ' + err.message });
+  }
+});
+
 export default router;

@@ -2,7 +2,6 @@
   "name": "ccdi-qrscan",
   "version": "1.0.0",
   "description": "CCDI QRScan — Web-Based Dynamic QR Code Attendance System",
-  "type": "module",
   "scripts": {
     "start": "node server/src/server.js",
     "build": "npm install --prefix server && npm install --prefix client && npm run build --prefix client",
@@ -12,9 +11,25 @@
     "seed": "npm run seed --prefix server"
   },
   "dependencies": {
-    "localtunnel": "^2.0.2"
+    "cors": "^2.8.6",
+    "express": "^5.2.1",
+    "localtunnel": "^2.0.2",
+    "qrcode": "^1.5.4",
+    "sqlite3": "^6.0.1"
   },
   "devDependencies": {
     "concurrently": "^9.1.2"
-  }
+  },
+  "main": "start-tunnel.js",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/TristanJames5/Qr-Scanner_CCDI_teamryzza.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/TristanJames5/Qr-Scanner_CCDI_teamryzza/issues"
+  },
+  "homepage": "https://github.com/TristanJames5/Qr-Scanner_CCDI_teamryzza#readme"
 }

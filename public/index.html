@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CCDI QRScan - Instructor Dashboard</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="container dashboard-container">
+        <header>
+            <h1>CCDI QRScan</h1>
+            <p>Instructor Dashboard</p>
+        </header>
+        
+        <main class="dashboard-grid">
+            <section class="control-panel">
+                <div class="card">
+                    <h2>Active Session</h2>
+                    <div class="form-group">
+                        <label for="sectionSelect">Select Section:</label>
+                        <select id="sectionSelect">
+                            <option value="">-- Choose Section --</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div class="card qr-card" id="qrCard" style="display: none;">
+                    <h2>Scan to Mark Present</h2>
+                    <div class="qr-container">
+                        <img id="qrImage" src="" alt="QR Code">
+                    </div>
+                    <div class="url-fallback">
+                        <p>Or visit:</p>
+                        <strong id="fallbackUrl"></strong>
+                    </div>
+                </div>
+            </section>
+
+            <section class="live-attendance">
+                <div class="card">
+                    <h2>Live Attendance <span id="studentCount" class="badge">0</span></h2>
+                    <div class="table-container">
+                        <table id="attendanceTable">
+                            <thead>
+                                <tr>
+                                    <th>Student Name</th>
+                                    <th>Time</th>
+                                </tr>
+                            </thead>
+                            <tbody id="attendanceBody">
+                                <!-- Records load here -->
+                            </tbody>
+                        </table>
+                        <div id="noRecords" class="empty-state">No students present yet.</div>
+                    </div>
+                </div>
+            </section>
+        </main>
+    </div>
+
+    <script>
+        const API_URL = '';
+        let currentSectionId = null;
+        let pollInterval = null;
+
+        document.addEventListener('DOMContentLoaded', async () => {
+            await loadSections();
+            
+            document.getElementById('sectionSelect').addEventListener('change', (e) => {
+                const sectionId = e.target.value;
+                if (sectionId) {
+                    startSession(sectionId);
+                } else {
+                    stopSession();
+                }
+            });
+        });
+
+        async function loadSections() {
+            try {
+                const res = await fetch(`${API_URL}/api/sections`);
+                const sections = await res.json();
+                const select = document.getElementById('sectionSelect');
+                
+                sections.forEach(sec => {
+                    const option = document.createElement('option');
+                    option.value = sec.id;
+                    option.textContent = sec.name;
+                    select.appendChild(option);
+                });
+            } catch (err) {
+                console.error("Failed to load sections", err);
+            }
+        }
+
+        async function startSession(sectionId) {
+            currentSectionId = sectionId;
+            
+            // Build the student URL (using the window.location.hostname to get local IP)
+            const scanUrl = `http://${window.location.hostname}:${window.location.port}/scan.html?section=${sectionId}`;
+            document.getElementById('fallbackUrl').textContent = scanUrl;
+
+            // Fetch QR code
+            try {
+                const qrRes = await fetch(`${API_URL}/api/qrcode?url=${encodeURIComponent(scanUrl)}`);
+                const qrData = await qrRes.json();
+                document.getElementById('qrImage').src = qrData.dataUrl;
+                document.getElementById('qrCard').style.display = 'block';
+            } catch (err) {
+                console.error("Failed to generate QR", err);
+            }
+
+            // Start polling attendance
+            pollAttendance();
+            if (pollInterval) clearInterval(pollInterval);
+            pollInterval = setInterval(pollAttendance, 3000);
+        }
+
+        function stopSession() {
+            currentSectionId = null;
+            document.getElementById('qrCard').style.display = 'none';
+            document.getElementById('attendanceBody').innerHTML = '';
+            document.getElementById('noRecords').style.display = 'block';
+            document.getElementById('studentCount').textContent = '0';
+            if (pollInterval) clearInterval(pollInterval);
+        }
+
+        async function pollAttendance() {
+            if (!currentSectionId) return;
+            
+            try {
+                const res = await fetch(`${API_URL}/api/attendance/${currentSectionId}`);
+                const records = await res.json();
+                
+                const tbody = document.getElementById('attendanceBody');
+                const noRecords = document.getElementById('noRecords');
+                const countBadge = document.getElementById('studentCount');
+                
+                tbody.innerHTML = '';
+                
+                if (records.length === 0) {
+                    noRecords.style.display = 'block';
+                    countBadge.textContent = '0';
+                } else {
+                    noRecords.style.display = 'none';
+                    countBadge.textContent = records.length;
+                    
+                    records.forEach(rec => {
+                        const tr = document.createElement('tr');
+                        const timeString = new Date(rec.timestamp).toLocaleTimeString();
+                        tr.innerHTML = `
+                            <td>${rec.name}</td>
+                            <td>${timeString}</td>
+                        `;
+                        tbody.appendChild(tr);
+                    });
+                }
+            } catch (err) {
+                console.error("Failed to fetch attendance", err);
+            }
+        }
+    </script>
+</body>
+</html>

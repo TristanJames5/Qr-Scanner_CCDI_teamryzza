@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import api from '../api/axios';
 import { QrCode, Lock, User, AlertCircle, ArrowRight, Sparkles, CheckCircle2 } from 'lucide-react';
@@ -227,6 +227,24 @@ export const LoginPage = () => {
               </button>
             </div>
           </div>
+        </div>
+
+        {/* Registration Links */}
+        <div className="mt-5 text-center space-y-2">
+          <p className="text-xs text-slate-400">
+            New student?{' '}
+            <Link
+              to="/register/student"
+              className="font-semibold text-emerald-400 hover:text-emerald-300 transition-colors"
+            >
+              Create a student account →
+            </Link>
+          </p>
+          <p className="text-xs text-slate-600 hover:text-slate-500 transition-colors">
+            <Link to="/register/staff" className="font-medium">
+              Faculty / Staff access →
+            </Link>
+          </p>
         </div>
       </div>
     </div>
