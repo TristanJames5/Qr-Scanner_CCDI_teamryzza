@@ -3,6 +3,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import api from '../../api/axios';
 import { Modal } from '../../components/common/Modal';
+import { AnnouncementsWidget } from '../../components/common/AnnouncementsWidget';
 import { 
   Play, 
   Tv, 
@@ -151,6 +152,9 @@ export const InstructorDashboard = () => {
           <span>View Risk & Pattern Alerts</span>
         </Link>
       </div>
+
+      {/* Announcements Widget */}
+      <AnnouncementsWidget />
 
       {/* Assigned Sections Grid */}
       <div className="space-y-4">

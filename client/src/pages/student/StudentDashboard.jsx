@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import api from '../../api/axios';
 import { StatusBadge, RiskBadge } from '../../components/common/Badge';
+import { AnnouncementsWidget } from '../../components/common/AnnouncementsWidget';
 import { 
   Scan, 
   BookOpen, 
@@ -116,6 +117,9 @@ export const StudentDashboard = () => {
           </Link>
         </div>
       </div>
+
+      {/* Announcements Widget */}
+      <AnnouncementsWidget />
 
       {/* Summary KPI Cards */}
       <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
