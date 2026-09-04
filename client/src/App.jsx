@@ -17,6 +17,8 @@ import { AttendanceInsightsPage } from './pages/instructor/AttendanceInsightsPag
 import { AdminDashboard } from './pages/admin/AdminDashboard';
 import { ManageUsersPage } from './pages/admin/ManageUsersPage';
 import { ManageSectionsPage } from './pages/admin/ManageSectionsPage';
+import { AdminLogsPage } from './pages/admin/AdminLogsPage';
+import { AdminCommunicationsPage } from './pages/admin/AdminCommunicationsPage';
 
 // Protected Route Wrapper
 const ProtectedRoute = ({ children, allowedRoles }) => {
@@ -136,6 +138,22 @@ export const App = () => {
             element={
               <ProtectedRoute allowedRoles={['admin']}>
                 <ManageSectionsPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/admin/logs"
+            element={
+              <ProtectedRoute allowedRoles={['admin']}>
+                <AdminLogsPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/admin/communications"
+            element={
+              <ProtectedRoute allowedRoles={['admin']}>
+                <AdminCommunicationsPage />
               </ProtectedRoute>
             }
           />

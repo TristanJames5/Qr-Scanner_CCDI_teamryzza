@@ -100,13 +100,73 @@ export function initDatabase() {
       timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
     );
 
+    CREATE TABLE IF NOT EXISTS admin_audit_logs (
+      id TEXT PRIMARY KEY,
+      admin_id TEXT REFERENCES users(id) ON DELETE SET NULL,
+      admin_name TEXT,
+      action TEXT NOT NULL,
+      target_type TEXT NOT NULL,
+      target_id TEXT,
+      details TEXT,
+      timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
+    );
+
+    CREATE TABLE IF NOT EXISTS announcements (
+      id TEXT PRIMARY KEY,
+      author_id TEXT REFERENCES users(id) ON DELETE SET NULL,
+      author_name TEXT,
+      title TEXT NOT NULL,
+      content TEXT NOT NULL,
+      target_audience TEXT CHECK(target_audience IN ('all', 'students', 'instructors')) DEFAULT 'all',
+      priority TEXT CHECK(priority IN ('normal', 'urgent', 'info')) DEFAULT 'normal',
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    );
+
+    CREATE TABLE IF NOT EXISTS absence_excuse_requests (
+      id TEXT PRIMARY KEY,
+      student_id TEXT REFERENCES users(id) ON DELETE CASCADE,
+      session_id TEXT REFERENCES class_sessions(id) ON DELETE CASCADE,
+      reason TEXT NOT NULL,
+      documentation_url TEXT,
+      status TEXT CHECK(status IN ('pending', 'approved', 'rejected')) DEFAULT 'pending',
+      reviewed_by TEXT REFERENCES users(id) ON DELETE SET NULL,
+      review_notes TEXT,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      reviewed_at DATETIME
+    );
+
+    CREATE TABLE IF NOT EXISTS notification_logs (
+      id TEXT PRIMARY KEY,
+      recipient_id TEXT REFERENCES users(id) ON DELETE CASCADE,
+      recipient_name TEXT,
+      recipient_contact TEXT,
+      channel TEXT CHECK(channel IN ('email', 'sms', 'in_app')) DEFAULT 'email',
+      subject TEXT,
+      message TEXT NOT NULL,
+      status TEXT DEFAULT 'sent',
+      sent_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    );
+
     CREATE INDEX IF NOT EXISTS idx_attendance_session ON attendance_records(session_id);
     CREATE INDEX IF NOT EXISTS idx_attendance_student ON attendance_records(student_id);
     CREATE INDEX IF NOT EXISTS idx_sessions_section ON class_sessions(section_id);
     CREATE INDEX IF NOT EXISTS idx_enrollments_student ON enrollments(student_id);
     CREATE INDEX IF NOT EXISTS idx_enrollments_section ON enrollments(section_id);
+    CREATE INDEX IF NOT EXISTS idx_admin_audit_time ON admin_audit_logs(timestamp);
   `);
   console.log('Database tables initialized successfully with foreign keys and WAL mode.');
+}
+
+export function logAdminAction(adminId, adminName, action, targetType, targetId, details) {
+  try {
+    const logId = crypto.randomUUID();
+    db.prepare(`
+      INSERT INTO admin_audit_logs (id, admin_id, admin_name, action, target_type, target_id, details)
+      VALUES (?, ?, ?, ?, ?, ?, ?)
+    `).run(logId, adminId || null, adminName || 'Admin', action, targetType, targetId || null, typeof details === 'object' ? JSON.stringify(details) : details || '');
+  } catch (err) {
+    console.error('Failed to write admin audit log:', err.message);
+  }
 }
 
 export default db;
