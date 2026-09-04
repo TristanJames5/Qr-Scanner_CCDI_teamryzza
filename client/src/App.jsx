@@ -18,7 +18,7 @@ import { AdminDashboard } from './pages/admin/AdminDashboard';
 import { ManageUsersPage } from './pages/admin/ManageUsersPage';
 import { ManageSectionsPage } from './pages/admin/ManageSectionsPage';
 import { AdminLogsPage } from './pages/admin/AdminLogsPage';
-import { AdminCommunicationsPage } from './pages/admin/AdminCommunicationsPage';
+
 
 // Protected Route Wrapper
 const ProtectedRoute = ({ children, allowedRoles }) => {
@@ -149,14 +149,7 @@ export const App = () => {
               </ProtectedRoute>
             }
           />
-          <Route
-            path="/admin/communications"
-            element={
-              <ProtectedRoute allowedRoles={['admin']}>
-                <AdminCommunicationsPage />
-              </ProtectedRoute>
-            }
-          />
+
 
           {/* Default Redirect */}
           <Route path="*" element={<Navigate to="/login" replace />} />

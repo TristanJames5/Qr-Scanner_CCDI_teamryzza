@@ -177,13 +177,7 @@ export const AdminDashboard = () => {
             <Activity className="w-4 h-4 text-sky-400" />
             <span>Audit & Scan Logs</span>
           </Link>
-          <Link
-            to="/admin/communications"
-            className="px-3.5 py-2.5 rounded-xl bg-slate-900 hover:bg-slate-800 border border-slate-700 text-slate-200 text-xs font-bold flex items-center gap-1.5 transition-colors"
-          >
-            <BellRing className="w-4 h-4 text-amber-400" />
-            <span>Communications</span>
-          </Link>
+
           <button
             onClick={handleExportReportCSV}
             title="Export Institutional Attendance Report as CSV"
