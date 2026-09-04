@@ -158,15 +158,7 @@ export const Navbar = () => {
                   <History className="w-4 h-4" />
                   <span>System Logs</span>
                 </Link>
-                <Link
-                  to="/admin/communications"
-                  className={`flex items-center space-x-2 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
-                    isActive('/admin/communications') ? 'bg-purple-600/20 text-purple-300 border border-purple-500/30' : 'text-slate-300 hover:text-white hover:bg-slate-800/60'
-                  }`}
-                >
-                  <MessageSquare className="w-4 h-4" />
-                  <span>Communications</span>
-                </Link>
+
               </>
             )}
           </nav>
