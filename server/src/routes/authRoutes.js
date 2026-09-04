@@ -210,4 +210,30 @@ router.post('/register/staff', async (req, res) => {
   }
 });
 
+// -----------------------------------------------------------------
+// Fetch Announcements for the authenticated user
+// -----------------------------------------------------------------
+router.get('/announcements', authenticate, (req, res) => {
+  try {
+    const { role } = req.user;
+    
+    let target = 'all';
+    if (role === 'student') target = 'students';
+    else if (role === 'instructor') target = 'instructors';
+
+    let query = 'SELECT * FROM announcements WHERE target_audience = ? OR target_audience = "all" ORDER BY created_at DESC';
+    const params = [target];
+
+    if (role === 'admin') {
+      query = 'SELECT * FROM announcements ORDER BY created_at DESC';
+      params.length = 0;
+    }
+
+    const announcements = db.prepare(query).all(...params);
+    res.json({ announcements });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to fetch announcements: ' + err.message });
+  }
+});
+
 export default router;

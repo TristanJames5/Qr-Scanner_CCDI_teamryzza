@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import api from '../../api/axios';
-import { Modal } from '../../components/common/Modal';
+import { Modal, ConfirmDialog } from '../../components/common/Modal';
 import { 
   BookOpen, PlusCircle, UploadCloud, Users, MapPin, Clock, Trash2, 
   ArrowLeft, FileText, CheckCircle2, AlertCircle, Edit, UserMinus, Search, UserPlus
@@ -20,6 +20,15 @@ export const ManageSectionsPage = () => {
   const [showImportModal, setShowImportModal] = useState(false);
   const [showRosterModal, setShowRosterModal] = useState(false);
   const [selectedItem, setSelectedItem] = useState(null);
+
+  // Notifications & Confirmations
+  const [toast, setToast] = useState(null);
+  const [confirmDialog, setConfirmDialog] = useState({ isOpen: false, title: '', message: '', onConfirm: null, confirmText: 'Confirm' });
+
+  const showToast = (message, type = 'success') => {
+    setToast({ message, type });
+    setTimeout(() => setToast(null), 5000);
+  };
 
   // Form Data
   const initialSectionForm = { name: '', subject_id: '', instructor_id: '', academic_term: '1st Semester 2026-2027', room: '', schedule: '' };
@@ -82,7 +91,8 @@ export const ManageSectionsPage = () => {
       }
       setShowSubjectModal(false);
       fetchData();
-    } catch (err) { alert(err.response?.data?.error || 'Failed to save subject'); }
+      showToast('Subject saved successfully!');
+    } catch (err) { showToast(err.response?.data?.error || 'Failed to save subject', 'error'); }
     finally { setSubmitting(false); }
   };
 
@@ -97,20 +107,41 @@ export const ManageSectionsPage = () => {
       }
       setShowSectionModal(false);
       fetchData();
-    } catch (err) { alert(err.response?.data?.error || 'Failed to save section'); }
+      showToast('Section saved successfully!');
+    } catch (err) { showToast(err.response?.data?.error || 'Failed to save section', 'error'); }
     finally { setSubmitting(false); }
   };
 
-  const handleDeleteSection = async (id, name) => {
-    if (!window.confirm(`Are you sure you want to delete section ${name}?`)) return;
-    try { await api.delete(`/admin/sections/${id}`); fetchData(); }
-    catch (err) { alert(err.response?.data?.error || 'Failed to delete section'); }
+  const handleDeleteSection = (id, name) => {
+    setConfirmDialog({
+      isOpen: true,
+      title: 'Delete Section',
+      message: `Are you sure you want to delete section ${name}? This action cannot be undone.`,
+      confirmText: 'Delete Section',
+      onConfirm: async () => {
+        try { 
+          await api.delete(`/admin/sections/${id}`); 
+          fetchData(); 
+          showToast('Section deleted successfully.');
+        } catch (err) { showToast(err.response?.data?.error || 'Failed to delete section', 'error'); }
+      }
+    });
   };
 
-  const handleDeleteSubject = async (id, code) => {
-    if (!window.confirm(`Are you sure you want to delete subject ${code}?`)) return;
-    try { await api.delete(`/admin/subjects/${id}`); fetchData(); }
-    catch (err) { alert(err.response?.data?.error || 'Failed to delete subject'); }
+  const handleDeleteSubject = (id, code) => {
+    setConfirmDialog({
+      isOpen: true,
+      title: 'Delete Subject',
+      message: `Are you sure you want to delete subject ${code}? This will cascade and delete all associated sections.`,
+      confirmText: 'Delete Subject',
+      onConfirm: async () => {
+        try { 
+          await api.delete(`/admin/subjects/${id}`); 
+          fetchData(); 
+          showToast('Subject deleted successfully.');
+        } catch (err) { showToast(err.response?.data?.error || 'Failed to delete subject', 'error'); }
+      }
+    });
   };
 
   const handleImportRoster = async (e) => {
@@ -121,7 +152,8 @@ export const ManageSectionsPage = () => {
       const res = await api.post(`/admin/sections/${selectedItem.id}/import-roster`, { csvData: csvText });
       setImportResult(res.data);
       fetchData();
-    } catch (err) { alert(err.response?.data?.error || 'Failed to import roster'); }
+      showToast(`Import successful! Added ${res.data.enrolledCount} students.`);
+    } catch (err) { showToast(err.response?.data?.error || 'Failed to import roster', 'error'); }
     finally { setSubmitting(false); }
   };
 
@@ -142,24 +174,54 @@ export const ManageSectionsPage = () => {
     e.preventDefault();
     if (!studentSearchId) return;
     try {
-      await api.post(`/admin/sections/${selectedItem.id}/enroll`, { student_id_number: studentSearchId });
+      await api.post(`/admin/sections/${selectedItem.id}/enroll`, { student_identifier: studentSearchId });
       setStudentSearchId('');
       fetchRoster(selectedItem.id);
       fetchData();
-    } catch (err) { alert(err.response?.data?.error || 'Failed to enroll student'); }
+      showToast('Student enrolled successfully!');
+    } catch (err) { showToast(err.response?.data?.error || 'Failed to enroll student', 'error'); }
   };
 
-  const handleRemoveStudent = async (studentId) => {
-    if (!window.confirm('Remove this student from the section?')) return;
-    try {
-      await api.delete(`/admin/sections/${selectedItem.id}/enroll/${studentId}`);
-      fetchRoster(selectedItem.id);
-      fetchData();
-    } catch (err) { alert(err.response?.data?.error || 'Failed to remove student'); }
+  const handleRemoveStudent = (studentId) => {
+    setConfirmDialog({
+      isOpen: true,
+      title: 'Remove Student',
+      message: 'Are you sure you want to unenroll this student from the section?',
+      confirmText: 'Remove',
+      onConfirm: async () => {
+        try {
+          await api.delete(`/admin/sections/${selectedItem.id}/enroll/${studentId}`);
+          fetchRoster(selectedItem.id);
+          fetchData();
+          showToast('Student removed successfully.');
+        } catch (err) { showToast(err.response?.data?.error || 'Failed to remove student', 'error'); }
+      }
+    });
   };
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-6">
+      
+      {/* Toast Notification */}
+      {toast && (
+        <div className={`fixed top-6 right-6 z-50 px-4 py-3 rounded-xl border shadow-xl flex items-center gap-3 animate-fade-in ${
+          toast.type === 'error' ? 'bg-rose-950/90 border-rose-600/50 text-rose-300' : 'bg-emerald-950/90 border-emerald-600/50 text-emerald-300'
+        }`}>
+          {toast.type === 'error' ? <AlertCircle className="w-5 h-5 text-rose-500" /> : <CheckCircle2 className="w-5 h-5 text-emerald-500" />}
+          <span className="text-sm font-semibold">{toast.message}</span>
+        </div>
+      )}
+
+      {/* Confirmation Dialog */}
+      <ConfirmDialog 
+        isOpen={confirmDialog.isOpen}
+        title={confirmDialog.title}
+        message={confirmDialog.message}
+        confirmText={confirmDialog.confirmText}
+        onClose={() => setConfirmDialog({ ...confirmDialog, isOpen: false })}
+        onConfirm={confirmDialog.onConfirm}
+      />
+
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div className="flex items-center gap-3">
           <Link to="/admin" className="p-2 rounded-xl bg-slate-900 border border-slate-800 text-slate-400 hover:text-white">

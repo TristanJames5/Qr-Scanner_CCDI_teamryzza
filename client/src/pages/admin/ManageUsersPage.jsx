@@ -2,8 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import api from '../../api/axios';
 import { RoleBadge } from '../../components/common/Badge';
-import { Modal } from '../../components/common/Modal';
-import { Users, UserPlus, Trash2, Search, ArrowLeft, Edit } from 'lucide-react';
+import { Modal, ConfirmDialog } from '../../components/common/Modal';
+import { Users, UserPlus, Trash2, Search, ArrowLeft, Edit, AlertCircle, CheckCircle2 } from 'lucide-react';
 
 export const ManageUsersPage = () => {
   const [users, setUsers] = useState([]);
@@ -17,6 +17,15 @@ export const ManageUsersPage = () => {
   const [formData, setFormData] = useState(initialForm);
   const [submitting, setSubmitting] = useState(false);
   const [formError, setFormError] = useState('');
+
+  // Notifications & Confirmations
+  const [toast, setToast] = useState(null);
+  const [confirmDialog, setConfirmDialog] = useState({ isOpen: false, title: '', message: '', onConfirm: null, confirmText: 'Confirm' });
+
+  const showToast = (message, type = 'success') => {
+    setToast({ message, type });
+    setTimeout(() => setToast(null), 5000);
+  };
 
   const fetchUsers = async () => {
     try {
@@ -51,14 +60,25 @@ export const ManageUsersPage = () => {
       }
       setShowModal(false);
       fetchUsers();
+      showToast('User saved successfully!');
     } catch (err) { setFormError(err.response?.data?.error || 'Failed to save user'); }
     finally { setSubmitting(false); }
   };
 
-  const handleDeleteUser = async (id, name) => {
-    if (!window.confirm(`Are you sure you want to delete user ${name}? This action cannot be undone.`)) return;
-    try { await api.delete(`/admin/users/${id}`); fetchUsers(); }
-    catch (err) { alert(err.response?.data?.error || 'Failed to delete user'); }
+  const handleDeleteUser = (id, name) => {
+    setConfirmDialog({
+      isOpen: true,
+      title: 'Delete User',
+      message: `Are you sure you want to delete user ${name}? This action cannot be undone.`,
+      confirmText: 'Delete User',
+      onConfirm: async () => {
+        try { 
+          await api.delete(`/admin/users/${id}`); 
+          fetchUsers(); 
+          showToast('User deleted successfully.');
+        } catch (err) { showToast(err.response?.data?.error || 'Failed to delete user', 'error'); }
+      }
+    });
   };
 
   const filteredUsers = users.filter(u => {
@@ -71,6 +91,27 @@ export const ManageUsersPage = () => {
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-6">
+      
+      {/* Toast Notification */}
+      {toast && (
+        <div className={`fixed top-6 right-6 z-50 px-4 py-3 rounded-xl border shadow-xl flex items-center gap-3 animate-fade-in ${
+          toast.type === 'error' ? 'bg-rose-950/90 border-rose-600/50 text-rose-300' : 'bg-emerald-950/90 border-emerald-600/50 text-emerald-300'
+        }`}>
+          {toast.type === 'error' ? <AlertCircle className="w-5 h-5 text-rose-500" /> : <CheckCircle2 className="w-5 h-5 text-emerald-500" />}
+          <span className="text-sm font-semibold">{toast.message}</span>
+        </div>
+      )}
+
+      {/* Confirmation Dialog */}
+      <ConfirmDialog 
+        isOpen={confirmDialog.isOpen}
+        title={confirmDialog.title}
+        message={confirmDialog.message}
+        confirmText={confirmDialog.confirmText}
+        onClose={() => setConfirmDialog({ ...confirmDialog, isOpen: false })}
+        onConfirm={confirmDialog.onConfirm}
+      />
+
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div className="flex items-center gap-3">
           <Link to="/admin" className="p-2 rounded-xl bg-slate-900 border border-slate-800 text-slate-400 hover:text-white"><ArrowLeft className="w-5 h-5" /></Link>

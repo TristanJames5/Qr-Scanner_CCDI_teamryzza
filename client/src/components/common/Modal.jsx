@@ -46,3 +46,34 @@ export const Modal = ({ isOpen, onClose, title, subtitle, children, maxWidth = '
     </div>
   );
 };
+
+export const ConfirmDialog = ({ isOpen, onClose, onConfirm, title, message, confirmText = 'Confirm', confirmStyle = 'danger' }) => {
+  if (!isOpen) return null;
+
+  return (
+    <Modal isOpen={isOpen} onClose={onClose} title={title} maxWidth="max-w-sm">
+      <div className="space-y-4">
+        <p className="text-sm text-slate-300">{message}</p>
+        <div className="flex gap-3 justify-end pt-2">
+          <button
+            onClick={onClose}
+            className="px-4 py-2 rounded-xl text-xs font-semibold text-slate-400 bg-slate-800 hover:bg-slate-700 transition-colors"
+          >
+            Cancel
+          </button>
+          <button
+            onClick={() => { onConfirm(); onClose(); }}
+            className={`px-4 py-2 rounded-xl text-xs font-bold text-white transition-colors ${
+              confirmStyle === 'danger' 
+                ? 'bg-rose-600 hover:bg-rose-500 shadow-lg shadow-rose-600/20' 
+                : 'bg-blue-600 hover:bg-blue-500 shadow-lg shadow-blue-600/20'
+            }`}
+          >
+            {confirmText}
+          </button>
+        </div>
+      </div>
+    </Modal>
+  );
+};
+
