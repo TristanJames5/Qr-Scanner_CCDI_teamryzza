@@ -77,6 +77,14 @@ export const StudentDashboard = () => {
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8">
+      {/* Error alert if fetch failed */}
+      {error && (
+        <div className="p-4 rounded-2xl bg-rose-500/15 border border-rose-500/30 text-rose-300 text-xs flex items-center gap-3">
+          <AlertTriangle className="w-5 h-5 text-rose-400 flex-shrink-0" />
+          <span>{error}</span>
+        </div>
+      )}
+
       {/* Student Welcome Banner */}
       <div className="glass-panel p-6 sm:p-8 rounded-3xl border border-slate-800 relative overflow-hidden bg-gradient-to-br from-slate-900 via-blue-950/40 to-slate-900">
         <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-6">
@@ -86,10 +94,10 @@ export const StudentDashboard = () => {
               <span>Student Attendance Portal</span>
             </div>
             <h1 className="text-2xl sm:text-3xl font-extrabold text-white">
-              Kumusta, {user.name}! 👋
+              Kumusta, {user?.name || 'Student'}! 👋
             </h1>
             <p className="text-sm text-slate-400 max-w-xl">
-              Student ID: <span className="text-slate-200 font-mono font-semibold">{user.id_number}</span> • {user.department}
+              Student ID: <span className="text-slate-200 font-mono font-semibold">{user?.id_number || 'N/A'}</span> • {user?.department || 'College of Information & Communications Technology'}
             </p>
           </div>
 
@@ -181,7 +189,7 @@ export const StudentDashboard = () => {
       </div>
 
       {/* Warning Notice if at risk */}
-      {overallRate < 75 && (
+      {overallRate < 75 && totalSessions > 0 && (
         <div className="p-4 rounded-2xl bg-rose-950/60 border border-rose-600/50 flex items-start gap-3.5 shadow-lg shadow-rose-950/30">
           <AlertTriangle className="w-5 h-5 text-rose-400 flex-shrink-0 mt-0.5" />
           <div>
@@ -200,51 +208,61 @@ export const StudentDashboard = () => {
           <span>My Enrolled Subjects ({data?.sections?.length || 0})</span>
         </h2>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
-          {data?.sections?.map((sec) => (
-            <div key={sec.id} className="glass-card p-6 rounded-2xl border border-slate-800 hover:border-slate-700 transition-all flex flex-col justify-between space-y-4">
-              <div>
-                <div className="flex items-start justify-between gap-2">
-                  <span className="text-xs font-bold px-2.5 py-1 rounded-md bg-blue-500/20 text-blue-300 border border-blue-500/30">
-                    {sec.name}
-                  </span>
-                  <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${sec.ratePercent >= 80 ? 'bg-emerald-500/20 text-emerald-300' : sec.ratePercent >= 75 ? 'bg-amber-500/20 text-amber-300' : 'bg-rose-500/20 text-rose-300'}`}>
-                    {sec.ratePercent}% Rate
-                  </span>
+        {data?.sections && data.sections.length > 0 ? (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+            {data.sections.map((sec) => (
+              <div key={sec.id} className="glass-card p-6 rounded-2xl border border-slate-800 hover:border-slate-700 transition-all flex flex-col justify-between space-y-4">
+                <div>
+                  <div className="flex items-start justify-between gap-2">
+                    <span className="text-xs font-bold px-2.5 py-1 rounded-md bg-blue-500/20 text-blue-300 border border-blue-500/30">
+                      {sec.name}
+                    </span>
+                    <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${sec.ratePercent >= 80 ? 'bg-emerald-500/20 text-emerald-300' : sec.ratePercent >= 75 ? 'bg-amber-500/20 text-amber-300' : 'bg-rose-500/20 text-rose-300'}`}>
+                      {sec.ratePercent}% Rate
+                    </span>
+                  </div>
+
+                  <h3 className="text-base font-bold text-slate-100 mt-2">
+                    {sec.subject_code} — {sec.subject_title}
+                  </h3>
+                  <p className="text-xs text-slate-400 mt-1">Instructor: <span className="text-slate-300">{sec.instructor_name || 'N/A'}</span></p>
+                  <div className="mt-2 flex items-center gap-3 text-xs text-slate-400">
+                    <span className="flex items-center gap-1"><MapPin className="w-3.5 h-3.5 text-slate-500" /> {sec.room}</span>
+                    <span className="flex items-center gap-1"><Calendar className="w-3.5 h-3.5 text-slate-500" /> {sec.schedule}</span>
+                  </div>
                 </div>
 
-                <h3 className="text-base font-bold text-slate-100 mt-2">
-                  {sec.subject_code} — {sec.subject_title}
-                </h3>
-                <p className="text-xs text-slate-400 mt-1">Instructor: <span className="text-slate-300">{sec.instructor_name || 'N/A'}</span></p>
-                <div className="mt-2 flex items-center gap-3 text-xs text-slate-400">
-                  <span className="flex items-center gap-1"><MapPin className="w-3.5 h-3.5 text-slate-500" /> {sec.room}</span>
-                  <span className="flex items-center gap-1"><Calendar className="w-3.5 h-3.5 text-slate-500" /> {sec.schedule}</span>
+                <div className="pt-4 border-t border-slate-800/80">
+                  <div className="flex items-center justify-between text-xs mb-1.5">
+                    <span className="text-slate-400">Breakdown:</span>
+                    <span className="text-slate-300 font-medium">
+                      <span className="text-emerald-400">{sec.present}P</span> • <span className="text-amber-400">{sec.late}L</span> • <span className="text-rose-400">{sec.absent}A</span>
+                    </span>
+                  </div>
+                  <div className="w-full bg-slate-800 h-2 rounded-full overflow-hidden flex">
+                    {sec.totalSessions > 0 ? (
+                      <>
+                        <div style={{ width: `${(sec.present / sec.totalSessions) * 100}%` }} className="bg-emerald-500 h-full" title={`Present: ${sec.present}`} />
+                        <div style={{ width: `${(sec.late / sec.totalSessions) * 100}%` }} className="bg-amber-500 h-full" title={`Late: ${sec.late}`} />
+                        <div style={{ width: `${(sec.absent / sec.totalSessions) * 100}%` }} className="bg-rose-500 h-full" title={`Absent: ${sec.absent}`} />
+                      </>
+                    ) : (
+                      <div className="w-full bg-slate-700 h-full" />
+                    )}
+                  </div>
                 </div>
               </div>
-
-              <div className="pt-4 border-t border-slate-800/80">
-                <div className="flex items-center justify-between text-xs mb-1.5">
-                  <span className="text-slate-400">Breakdown:</span>
-                  <span className="text-slate-300 font-medium">
-                    <span className="text-emerald-400">{sec.present}P</span> • <span className="text-amber-400">{sec.late}L</span> • <span className="text-rose-400">{sec.absent}A</span>
-                  </span>
-                </div>
-                <div className="w-full bg-slate-800 h-2 rounded-full overflow-hidden flex">
-                  {sec.totalSessions > 0 ? (
-                    <>
-                      <div style={{ width: `${(sec.present / sec.totalSessions) * 100}%` }} className="bg-emerald-500 h-full" title={`Present: ${sec.present}`} />
-                      <div style={{ width: `${(sec.late / sec.totalSessions) * 100}%` }} className="bg-amber-500 h-full" title={`Late: ${sec.late}`} />
-                      <div style={{ width: `${(sec.absent / sec.totalSessions) * 100}%` }} className="bg-rose-500 h-full" title={`Absent: ${sec.absent}`} />
-                    </>
-                  ) : (
-                    <div className="w-full bg-slate-700 h-full" />
-                  )}
-                </div>
-              </div>
-            </div>
-          ))}
-        </div>
+            ))}
+          </div>
+        ) : (
+          <div className="glass-panel p-8 rounded-2xl border border-slate-800 text-center space-y-2">
+            <BookOpen className="w-8 h-8 text-slate-600 mx-auto" />
+            <p className="text-sm font-semibold text-slate-300">No Subjects Enrolled Yet</p>
+            <p className="text-xs text-slate-500 max-w-sm mx-auto">
+              You haven't been added to any subject rosters yet. Contact your instructor or college registrar to enroll in your class sections.
+            </p>
+          </div>
+        )}
       </div>
 
       {/* Recent Attendance Scans History */}

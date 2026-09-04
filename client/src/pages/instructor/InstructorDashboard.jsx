@@ -7,14 +7,14 @@ import {
   Play, 
   Tv, 
   Users, 
-  Calendar, 
   MapPin, 
   Clock, 
-  FileSpreadsheet, 
   AlertTriangle,
   ArrowRight,
   Sparkles,
-  BookOpen
+  BookOpen,
+  Plus,
+  GraduationCap
 } from 'lucide-react';
 
 export const InstructorDashboard = () => {
@@ -29,6 +29,12 @@ export const InstructorDashboard = () => {
   const [selectedSection, setSelectedSection] = useState(null);
   const [lateCutoff, setLateCutoff] = useState(15);
   const [startingSession, setStartingSession] = useState(false);
+
+  // Assign New Class Modal state
+  const [showAssignModal, setShowAssignModal] = useState(false);
+  const [unassignedSections, setUnassignedSections] = useState([]);
+  const [assigningId, setAssigningId] = useState(null);
+  const [assignError, setAssignError] = useState('');
 
   const fetchSections = async () => {
     try {
@@ -45,6 +51,40 @@ export const InstructorDashboard = () => {
   useEffect(() => {
     fetchSections();
   }, []);
+
+  const openAssignModal = async () => {
+    setAssignError('');
+    setShowAssignModal(true);
+    try {
+      // Fetch ALL sections (admin endpoint returns all; we filter unassigned client-side)
+      const res = await api.get('/sections/all-unassigned');
+      setUnassignedSections(res.data.sections || []);
+    } catch {
+      // Fallback: hit the admin sections list and filter
+      try {
+        const res = await api.get('/admin/sections');
+        const all = res.data.sections || [];
+        setUnassignedSections(all.filter(s => !s.instructor_id));
+      } catch {
+        setAssignError('Could not load available sections.');
+      }
+    }
+  };
+
+  const handleAssignSection = async (sectionId) => {
+    setAssigningId(sectionId);
+    setAssignError('');
+    try {
+      await api.patch(`/sections/${sectionId}/assign-instructor`);
+      setShowAssignModal(false);
+      setUnassignedSections([]);
+      fetchSections(); // refresh my sections list
+    } catch (err) {
+      setAssignError(err.response?.data?.error || 'Failed to assign section');
+    } finally {
+      setAssigningId(null);
+    }
+  };
 
   const handleStartSession = async (e) => {
     e.preventDefault();
@@ -95,10 +135,10 @@ export const InstructorDashboard = () => {
             <span>Faculty Attendance Management</span>
           </div>
           <h1 className="text-2xl sm:text-3xl font-extrabold text-white">
-            Welcome, {user.name}
+            Welcome, {user?.name || 'Faculty Member'}
           </h1>
           <p className="text-sm text-slate-400">
-            {user.department} • Manage class sessions, launch dynamic QR codes, and monitor live scans.
+            {user?.department || 'Information Technology Department'} • Manage class sessions, launch dynamic QR codes, and monitor live scans.
           </p>
         </div>
 
@@ -119,91 +159,170 @@ export const InstructorDashboard = () => {
             <BookOpen className="w-5 h-5 text-blue-400" />
             <span>My Assigned Sections ({sections.length})</span>
           </h2>
+          <button
+            onClick={openAssignModal}
+            className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-bold text-white bg-blue-600/80 hover:bg-blue-500 border border-blue-500/40 shadow-lg shadow-blue-600/20 transition-all"
+          >
+            <Plus className="w-3.5 h-3.5" />
+            Assign New Class
+          </button>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-2 gap-6">
-          {sections.map((sec) => (
-            <div 
-              key={sec.id} 
-              className={`glass-card p-6 rounded-2xl border transition-all flex flex-col justify-between space-y-6 ${
-                sec.active_session_id 
-                  ? 'border-blue-500/50 shadow-lg shadow-blue-500/10 bg-blue-950/20' 
-                  : 'border-slate-800'
-              }`}
-            >
-              <div>
-                {/* Header with status badge */}
-                <div className="flex items-start justify-between gap-3">
-                  <div>
-                    <span className="text-xs font-bold px-2.5 py-1 rounded-md bg-blue-500/20 text-blue-300 border border-blue-500/30">
-                      {sec.name}
-                    </span>
-                    <h3 className="text-lg font-bold text-slate-100 mt-2">
-                      {sec.subject_code} — {sec.subject_title}
-                    </h3>
+        {sections.length > 0 ? (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-2 gap-6">
+            {sections.map((sec) => (
+              <div 
+                key={sec.id} 
+                className={`glass-card p-6 rounded-2xl border transition-all flex flex-col justify-between space-y-6 ${
+                  sec.active_session_id 
+                    ? 'border-blue-500/50 shadow-lg shadow-blue-500/10 bg-blue-950/20' 
+                    : 'border-slate-800'
+                }`}
+              >
+                <div>
+                  {/* Header with status badge */}
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <span className="text-xs font-bold px-2.5 py-1 rounded-md bg-blue-500/20 text-blue-300 border border-blue-500/30">
+                        {sec.name}
+                      </span>
+                      <h3 className="text-lg font-bold text-slate-100 mt-2">
+                        {sec.subject_code} — {sec.subject_title}
+                      </h3>
+                    </div>
+
+                    {sec.active_session_id ? (
+                      <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 animate-pulse">
+                        <span className="w-2 h-2 rounded-full bg-emerald-400"></span>
+                        SESSION LIVE
+                      </span>
+                    ) : (
+                      <span className="text-xs text-slate-500 font-medium">
+                        {sec.closed_sessions_count} sessions held
+                      </span>
+                    )}
                   </div>
 
+                  {/* Section details */}
+                  <div className="mt-4 grid grid-cols-2 gap-2.5 text-xs text-slate-400">
+                    <div className="flex items-center gap-1.5">
+                      <MapPin className="w-3.5 h-3.5 text-slate-500" />
+                      <span>{sec.room}</span>
+                    </div>
+                    <div className="flex items-center gap-1.5">
+                      <Users className="w-3.5 h-3.5 text-slate-500" />
+                      <span>{sec.enrolled_count} Enrolled Students</span>
+                    </div>
+                    <div className="flex items-center gap-1.5 col-span-2">
+                      <Clock className="w-3.5 h-3.5 text-slate-500" />
+                      <span>{sec.schedule} • {sec.academic_term}</span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Action Buttons */}
+                <div className="pt-4 border-t border-slate-800/80 flex flex-wrap items-center gap-3">
                   {sec.active_session_id ? (
-                    <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 animate-pulse">
-                      <span className="w-2 h-2 rounded-full bg-emerald-400"></span>
-                      SESSION LIVE
-                    </span>
+                    <Link
+                      to={`/instructor/session/${sec.active_session_id}`}
+                      className="flex-1 inline-flex items-center justify-center gap-2 py-2.5 px-4 rounded-xl text-xs font-bold text-white bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 shadow-lg shadow-emerald-600/30 transition-all"
+                    >
+                      <Tv className="w-4 h-4" />
+                      <span>Open Live Projector Screen</span>
+                    </Link>
                   ) : (
-                    <span className="text-xs text-slate-500 font-medium">
-                      {sec.closed_sessions_count} sessions held
-                    </span>
+                    <button
+                      onClick={() => { setSelectedSection(sec); setLateCutoff(15); }}
+                      className="flex-1 inline-flex items-center justify-center gap-2 py-2.5 px-4 rounded-xl text-xs font-bold text-white bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 shadow-lg shadow-blue-600/30 transition-all"
+                    >
+                      <Play className="w-4 h-4 fill-white" />
+                      <span>Start Class Session</span>
+                    </button>
                   )}
-                </div>
 
-                {/* Section details */}
-                <div className="mt-4 grid grid-cols-2 gap-2.5 text-xs text-slate-400">
-                  <div className="flex items-center gap-1.5">
-                    <MapPin className="w-3.5 h-3.5 text-slate-500" />
-                    <span>{sec.room}</span>
-                  </div>
-                  <div className="flex items-center gap-1.5">
-                    <Users className="w-3.5 h-3.5 text-slate-500" />
-                    <span>{sec.enrolled_count} Enrolled Students</span>
-                  </div>
-                  <div className="flex items-center gap-1.5 col-span-2">
-                    <Clock className="w-3.5 h-3.5 text-slate-500" />
-                    <span>{sec.schedule} • {sec.academic_term}</span>
-                  </div>
-                </div>
-              </div>
-
-              {/* Action Buttons */}
-              <div className="pt-4 border-t border-slate-800/80 flex flex-wrap items-center gap-3">
-                {sec.active_session_id ? (
                   <Link
-                    to={`/instructor/session/${sec.active_session_id}`}
-                    className="flex-1 inline-flex items-center justify-center gap-2 py-2.5 px-4 rounded-xl text-xs font-bold text-white bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 shadow-lg shadow-emerald-600/30 transition-all"
+                    to={`/instructor/section/${sec.id}`}
+                    className="py-2.5 px-3.5 rounded-xl text-xs font-semibold text-slate-300 bg-slate-800/80 hover:bg-slate-700 hover:text-white border border-slate-700/80 transition-colors flex items-center gap-1.5"
                   >
-                    <Tv className="w-4 h-4" />
-                    <span>Open Live Projector Screen</span>
+                    <span>Roster & History</span>
+                    <ArrowRight className="w-3.5 h-3.5" />
                   </Link>
-                ) : (
-                  <button
-                    onClick={() => { setSelectedSection(sec); setLateCutoff(15); }}
-                    className="flex-1 inline-flex items-center justify-center gap-2 py-2.5 px-4 rounded-xl text-xs font-bold text-white bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 shadow-lg shadow-blue-600/30 transition-all"
-                  >
-                    <Play className="w-4 h-4 fill-white" />
-                    <span>Start Class Session</span>
-                  </button>
-                )}
-
-                <Link
-                  to={`/instructor/section/${sec.id}`}
-                  className="py-2.5 px-3.5 rounded-xl text-xs font-semibold text-slate-300 bg-slate-800/80 hover:bg-slate-700 hover:text-white border border-slate-700/80 transition-colors flex items-center gap-1.5"
-                >
-                  <span>Roster & History</span>
-                  <ArrowRight className="w-3.5 h-3.5" />
-                </Link>
+                </div>
               </div>
+            ))}
+          </div>
+        ) : (
+          <div className="glass-panel p-10 rounded-3xl border border-slate-800 text-center space-y-4">
+            <div className="w-14 h-14 rounded-2xl bg-blue-500/10 border border-blue-500/20 mx-auto flex items-center justify-center">
+              <GraduationCap className="w-7 h-7 text-blue-400" />
+            </div>
+            <div className="space-y-1">
+              <h3 className="text-base font-bold text-slate-200">No Class Sections Assigned Yet</h3>
+              <p className="text-xs text-slate-400 max-w-md mx-auto">
+                You don't have any teaching sections assigned to your account right now. You can self-assign an unassigned class or ask an administrator to assign your sections.
+              </p>
+            </div>
+            <button
+              onClick={openAssignModal}
+              className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl text-xs font-bold text-white bg-blue-600 hover:bg-blue-500 shadow-lg shadow-blue-600/25 transition-all"
+            >
+              <Plus className="w-4 h-4" />
+              <span>Assign My First Class</span>
+            </button>
+          </div>
+        )}
+      </div>
+
+      {/* ── Assign New Class Modal ─────────────────────────────────── */}
+      <Modal
+        isOpen={showAssignModal}
+        onClose={() => { setShowAssignModal(false); setAssignError(''); }}
+        title="Assign New Class"
+        subtitle="Select an unassigned section to add to your dashboard"
+      >
+        <div className="space-y-3">
+          {assignError && (
+            <div className="p-3 rounded-xl bg-rose-500/15 border border-rose-500/30 text-rose-300 text-xs">{assignError}</div>
+          )}
+          {unassignedSections.length === 0 && !assignError && (
+            <div className="py-10 flex flex-col items-center gap-2 text-slate-400">
+              <GraduationCap className="w-8 h-8 text-slate-600" />
+              <p className="text-sm">No unassigned sections available.</p>
+              <p className="text-xs text-slate-500">Ask an admin to create new sections.</p>
+            </div>
+          )}
+          {unassignedSections.map(sec => (
+            <div
+              key={sec.id}
+              className="flex items-center justify-between gap-3 p-4 rounded-xl bg-slate-900/80 border border-slate-800 hover:border-blue-500/40 transition-colors"
+            >
+              <div className="min-w-0">
+                <div className="flex items-center gap-2">
+                  <span className="text-[11px] font-bold px-2 py-0.5 rounded bg-blue-500/15 text-blue-300 border border-blue-500/25">{sec.name}</span>
+                  <span className="text-xs text-slate-400">{sec.subject_code}</span>
+                </div>
+                <p className="text-sm font-semibold text-slate-200 mt-1 truncate">{sec.subject_title}</p>
+                <p className="text-[11px] text-slate-500 mt-0.5">{sec.room} • {sec.schedule}</p>
+              </div>
+              <button
+                onClick={() => handleAssignSection(sec.id)}
+                disabled={assigningId === sec.id}
+                className="flex-shrink-0 px-4 py-2 rounded-xl text-xs font-bold text-white bg-blue-600 hover:bg-blue-500 disabled:opacity-50 shadow-lg shadow-blue-600/25 transition-all"
+              >
+                {assigningId === sec.id ? 'Assigning…' : 'Assign'}
+              </button>
             </div>
           ))}
+          <div className="pt-2">
+            <button
+              onClick={() => { setShowAssignModal(false); setAssignError(''); }}
+              className="w-full py-2.5 rounded-xl text-xs font-semibold text-slate-400 bg-slate-800 hover:bg-slate-700"
+            >
+              Cancel
+            </button>
+          </div>
         </div>
-      </div>
+      </Modal>
 
       {/* Start Session Setup Modal */}
       <Modal

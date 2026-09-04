@@ -61,7 +61,7 @@ export const AdminDashboard = () => {
             <span>Academic Administration Portal</span>
           </div>
           <h1 className="text-2xl sm:text-3xl font-extrabold text-white">
-            System Administration — {user.name}
+            System Administration — {user?.name || 'Administrator'}
           </h1>
           <p className="text-sm text-slate-400">
             Computer Communication Development Institute (CCDI) • Dean & Registrar Analytics

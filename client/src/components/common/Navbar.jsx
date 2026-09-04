@@ -156,15 +156,15 @@ export const Navbar = () => {
           <div className="flex items-center space-x-3">
             <div className="hidden sm:flex flex-col items-end text-right">
               <div className="flex items-center space-x-2">
-                <span className="text-sm font-semibold text-slate-200">{user.name}</span>
-                <RoleBadge role={user.role} />
+                <span className="text-sm font-semibold text-slate-200">{user?.name || 'User'}</span>
+                <RoleBadge role={user?.role} />
               </div>
-              <span className="text-xs text-slate-400 font-mono">{user.id_number}</span>
+              <span className="text-xs text-slate-400 font-mono">{user?.id_number || user?.email || ''}</span>
             </div>
 
             <img
-              src={user.avatar_url || `https://api.dicebear.com/7.x/avataaars/svg?seed=${user.id_number}`}
-              alt={user.name}
+              src={user?.avatar_url || `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(user?.id_number || user?.email || user?.name || 'ccdi')}`}
+              alt={user?.name || 'User'}
               className="w-9 h-9 rounded-xl border border-slate-700 bg-slate-800 object-cover"
             />
 

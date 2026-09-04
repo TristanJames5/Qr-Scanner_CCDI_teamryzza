@@ -1,6 +1,7 @@
 import express from 'express';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
+import { v4 as uuidv4 } from 'uuid';
 import db from '../config/db.js';
 import { authenticate } from '../middleware/auth.js';
 
@@ -28,6 +29,26 @@ router.post('/login', (req, res) => {
     const isMatch = bcrypt.compareSync(password, user.password_hash);
     if (!isMatch) {
       return res.status(401).json({ error: 'Invalid credentials. Incorrect password.' });
+    }
+
+    // Self-healing: if user has missing id or avatar, fix it in DB
+    if (!user.id || !user.id_number) {
+      const generatedId = user.id || uuidv4();
+      const prefix = user.role === 'admin' ? 'ADM' : user.role === 'instructor' ? 'INST' : '2023';
+      const generatedIdNum = user.id_number || `${prefix}-${Math.floor(100 + Math.random() * 900)}`;
+      const generatedAvatar = user.avatar_url || `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(generatedIdNum)}`;
+      const dept = user.department || (user.role === 'student' ? 'College of Information & Communications Technology' : 'Information Technology Department');
+
+      db.prepare(`
+        UPDATE users 
+        SET id = ?, id_number = ?, department = ?, avatar_url = ? 
+        WHERE email = ?
+      `).run(generatedId, generatedIdNum, dept, generatedAvatar, user.email);
+
+      user.id = generatedId;
+      user.id_number = generatedIdNum;
+      user.department = dept;
+      user.avatar_url = generatedAvatar;
     }
 
     const token = jwt.sign(
@@ -97,22 +118,33 @@ router.post('/register/student', async (req, res) => {
       return res.status(400).json({ error: 'Password must be at least 6 characters.' });
     }
 
+    const cleanEmail = email.trim().toLowerCase();
+    const cleanIdNumber = id_number.trim();
+    const cleanName = name.trim();
+
     // Check for duplicates
     const existing = db.prepare(
       'SELECT id FROM users WHERE LOWER(email) = LOWER(?) OR LOWER(id_number) = LOWER(?)'
-    ).get(email.trim(), id_number.trim());
+    ).get(cleanEmail, cleanIdNumber);
 
     if (existing) {
       return res.status(409).json({ error: 'A user with that Student ID or email already exists.' });
     }
 
+    const userId = uuidv4();
     const password_hash = bcrypt.hashSync(password, 10);
+    const department = 'College of Information & Communications Technology';
+    const avatar_url = `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(cleanIdNumber)}`;
 
-    db.prepare(
-      'INSERT INTO users (name, id_number, email, password_hash, role) VALUES (?, ?, ?, ?, ?)'
-    ).run(name.trim(), id_number.trim(), email.trim().toLowerCase(), password_hash, 'student');
+    db.prepare(`
+      INSERT INTO users (id, id_number, name, email, password_hash, role, department, avatar_url)
+      VALUES (?, ?, ?, ?, ?, 'student', ?, ?)
+    `).run(userId, cleanIdNumber, cleanName, cleanEmail, password_hash, department, avatar_url);
 
-    return res.status(201).json({ message: 'Student account created successfully.' });
+    return res.status(201).json({ 
+      message: 'Student account created successfully.',
+      user: { id: userId, id_number: cleanIdNumber, name: cleanName, email: cleanEmail, role: 'student' }
+    });
   } catch (err) {
     return res.status(500).json({ error: 'Server error during registration: ' + err.message });
   }
@@ -123,7 +155,7 @@ router.post('/register/student', async (req, res) => {
 // -----------------------------------------------------------------
 router.post('/register/staff', async (req, res) => {
   try {
-    const { name, email, role, department, password, invite_token } = req.body;
+    const { name, email, role, department, password, invite_token, id_number } = req.body;
     const STAFF_INVITE_TOKEN = process.env.STAFF_INVITE_TOKEN || 'ccdi_staff_2026';
 
     if (!name || !email || !role || !department || !password || !invite_token) {
@@ -144,22 +176,35 @@ router.post('/register/staff', async (req, res) => {
       return res.status(403).json({ error: 'Invalid invite token. Please contact your administrator.' });
     }
 
+    const cleanEmail = email.trim().toLowerCase();
+    const cleanName = name.trim();
+    const cleanDept = department.trim();
+
     // Check for duplicate email
     const existing = db.prepare(
       'SELECT id FROM users WHERE LOWER(email) = LOWER(?)'
-    ).get(email.trim());
+    ).get(cleanEmail);
 
     if (existing) {
       return res.status(409).json({ error: 'A user with that email already exists.' });
     }
 
+    const userId = uuidv4();
+    const prefix = role === 'admin' ? 'ADM' : 'INST';
+    const randomSuffix = Math.floor(100 + Math.random() * 900);
+    const staffIdNumber = id_number?.trim() || `${prefix}-${randomSuffix}`;
     const password_hash = bcrypt.hashSync(password, 10);
+    const avatar_url = `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(staffIdNumber)}`;
 
-    db.prepare(
-      'INSERT INTO users (name, email, password_hash, role, department) VALUES (?, ?, ?, ?, ?)'
-    ).run(name.trim(), email.trim().toLowerCase(), password_hash, role, department.trim());
+    db.prepare(`
+      INSERT INTO users (id, id_number, name, email, password_hash, role, department, avatar_url)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(userId, staffIdNumber, cleanName, cleanEmail, password_hash, role, cleanDept, avatar_url);
 
-    return res.status(201).json({ message: 'Staff account created successfully.' });
+    return res.status(201).json({ 
+      message: 'Staff account created successfully.',
+      user: { id: userId, id_number: staffIdNumber, name: cleanName, email: cleanEmail, role, department: cleanDept }
+    });
   } catch (err) {
     return res.status(500).json({ error: 'Server error during registration: ' + err.message });
   }

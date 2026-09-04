@@ -5,6 +5,23 @@ import { generateSectionAttendanceCSV } from '../services/exportService.js';
 
 const router = express.Router();
 
+// List sections with no instructor assigned (for the self-assign modal)
+router.get('/all-unassigned', authenticate, (req, res) => {
+  try {
+    const sections = db.prepare(`
+      SELECT s.id, s.name, s.room, s.schedule, s.academic_term,
+             sub.code as subject_code, sub.title as subject_title
+      FROM sections s
+      JOIN subjects sub ON s.subject_id = sub.id
+      WHERE s.instructor_id IS NULL
+      ORDER BY sub.code ASC, s.name ASC
+    `).all();
+    res.json({ sections });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to fetch unassigned sections: ' + err.message });
+  }
+});
+
 // List sections (role-aware: instructors see their assigned sections, admins see all)
 router.get('/', authenticate, (req, res) => {
   try {
@@ -82,6 +99,31 @@ router.get('/:id', authenticate, (req, res) => {
     });
   } catch (err) {
     res.status(500).json({ error: 'Failed to fetch section details: ' + err.message });
+  }
+});
+
+// Self-assign instructor to a section
+router.patch('/:id/assign-instructor', authenticate, (req, res) => {
+  try {
+    const { id } = req.params;
+    const instructorId = req.user.id;
+
+    // Only instructors (and admins) can call this
+    if (req.user.role !== 'instructor' && req.user.role !== 'admin') {
+      return res.status(403).json({ error: 'Only instructors can self-assign to sections' });
+    }
+
+    const section = db.prepare('SELECT id, instructor_id FROM sections WHERE id = ?').get(id);
+    if (!section) return res.status(404).json({ error: 'Section not found' });
+
+    if (section.instructor_id) {
+      return res.status(409).json({ error: 'This section already has an instructor assigned' });
+    }
+
+    db.prepare('UPDATE sections SET instructor_id = ? WHERE id = ?').run(instructorId, id);
+    res.json({ message: 'Section assigned successfully' });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to assign section: ' + err.message });
   }
 });
 

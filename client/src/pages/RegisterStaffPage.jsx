@@ -3,7 +3,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import api from '../api/axios';
 import {
   QrCode, Lock, User, AlertCircle, ArrowRight,
-  CheckCircle2, Mail, ShieldCheck, Building2
+  CheckCircle2, Mail, ShieldCheck, Building2, IdCard
 } from 'lucide-react';
 
 const ROLES = [
@@ -14,6 +14,7 @@ const ROLES = [
 export const RegisterStaffPage = () => {
   const [form, setForm] = useState({
     name: '',
+    id_number: '',
     email: '',
     role: 'instructor',
     department: '',
@@ -52,6 +53,7 @@ export const RegisterStaffPage = () => {
       setError('');
       await api.post('/auth/register/staff', {
         name: form.name.trim(),
+        id_number: form.id_number.trim() || undefined,
         email: form.email.trim(),
         role: form.role,
         department: form.department.trim(),
@@ -130,6 +132,26 @@ export const RegisterStaffPage = () => {
                   placeholder="e.g. Prof. Roberto Santos"
                   className="block w-full pl-10 pr-3.5 py-2.5 bg-slate-900/90 border border-slate-700/80 rounded-xl text-slate-100 placeholder-slate-500 text-sm focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all"
                   required
+                />
+              </div>
+            </div>
+
+            {/* Employee ID (Optional) */}
+            <div>
+              <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-1.5">
+                Faculty / Employee ID <span className="text-slate-500 font-normal lowercase">(optional)</span>
+              </label>
+              <div className="relative rounded-xl shadow-sm">
+                <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-400">
+                  <IdCard className="w-4 h-4" />
+                </div>
+                <input
+                  type="text"
+                  name="id_number"
+                  value={form.id_number}
+                  onChange={handleChange}
+                  placeholder="e.g. INST-104 (or leave blank to auto-generate)"
+                  className="block w-full pl-10 pr-3.5 py-2.5 bg-slate-900/90 border border-slate-700/80 rounded-xl text-slate-100 placeholder-slate-500 text-sm focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all"
                 />
               </div>
             </div>

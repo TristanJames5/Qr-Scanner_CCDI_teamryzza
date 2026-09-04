@@ -192,7 +192,7 @@ export const StudentScanPage = () => {
         </Link>
         <div className="text-right">
           <span className="text-xs text-slate-400">Scanning as</span>
-          <p className="text-xs font-bold text-slate-200">{user.name}</p>
+          <p className="text-xs font-bold text-slate-200">{user?.name || 'Student'}</p>
         </div>
       </div>
 
