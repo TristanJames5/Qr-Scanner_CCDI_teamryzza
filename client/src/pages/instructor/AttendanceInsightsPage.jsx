@@ -102,19 +102,31 @@ export const AttendanceInsightsPage = () => {
     if (activeTab === 'reports') fetchReports();
   }, [activeTab, fetchReports]);
 
-  const downloadReportCSV = () => {
-    const params = new URLSearchParams();
-    if (filterSection) params.set('sectionId', filterSection);
-    if (filterMonth)   params.set('month', filterMonth);
-    if (filterYear)    params.set('year', filterYear);
-    window.open(`/api/analytics/reports/export-csv?${params.toString()}`, '_blank');
+  const downloadReportCSV = async () => {
+    try {
+      const params = new URLSearchParams();
+      if (filterSection) params.set('sectionId', filterSection);
+      if (filterMonth)   params.set('month', filterMonth);
+      if (filterYear)    params.set('year', filterYear);
+      const res = await api.get(`/analytics/reports/export-csv?${params.toString()}`, { responseType: 'blob' });
+      const url = URL.createObjectURL(res.data);
+      const a = document.createElement('a'); a.href = url;
+      a.download = `CCDI_Attendance_Report.csv`; a.click();
+      URL.revokeObjectURL(url);
+    } catch (err) { alert('CSV download failed: ' + (err.response?.data?.error || err.message)); }
   };
 
-  const downloadSectionCSV = (secId) => {
-    const params = new URLSearchParams({ sectionId: secId });
-    if (filterMonth) params.set('month', filterMonth);
-    if (filterYear)  params.set('year', filterYear);
-    window.open(`/api/analytics/reports/export-csv?${params.toString()}`, '_blank');
+  const downloadSectionCSV = async (secId) => {
+    try {
+      const params = new URLSearchParams({ sectionId: secId });
+      if (filterMonth) params.set('month', filterMonth);
+      if (filterYear)  params.set('year', filterYear);
+      const res = await api.get(`/analytics/reports/export-csv?${params.toString()}`, { responseType: 'blob' });
+      const url = URL.createObjectURL(res.data);
+      const a = document.createElement('a'); a.href = url;
+      a.download = `CCDI_Section_Report_${secId}.csv`; a.click();
+      URL.revokeObjectURL(url);
+    } catch (err) { alert('CSV download failed: ' + (err.response?.data?.error || err.message)); }
   };
 
   // Build heatmap data from sessionAnalyticsData

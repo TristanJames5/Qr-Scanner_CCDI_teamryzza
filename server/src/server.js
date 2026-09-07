@@ -17,6 +17,8 @@ import scanRoutes from './routes/scanRoutes.js';
 import sectionRoutes from './routes/sectionRoutes.js';
 import analyticsRoutes from './routes/analyticsRoutes.js';
 import adminRoutes from './routes/adminRoutes.js';
+import instructorRoutes from './routes/instructorRoutes.js';
+import gamificationRoutes from './routes/gamificationRoutes.js';
 
 dotenv.config();
 
@@ -71,6 +73,8 @@ app.use('/api/scan', scanRoutes);
 app.use('/api/sections', sectionRoutes);
 app.use('/api/analytics', analyticsRoutes);
 app.use('/api/admin', adminRoutes);
+app.use('/api/instructor', instructorRoutes);
+app.use('/api/gamification', gamificationRoutes);
 
 // Serve Frontend Production Build (if dist folder exists)
 const clientDistPath = path.resolve(__dirname, '../../client/dist');

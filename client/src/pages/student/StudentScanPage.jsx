@@ -362,6 +362,44 @@ export const StudentScanPage = () => {
             </p>
           </div>
 
+          {/* Gamification Banner */}
+          {scanResult.gamification && (
+            <div className="bg-gradient-to-r from-amber-500/20 via-yellow-500/20 to-amber-500/20 border border-amber-500/30 rounded-2xl p-4 animate-bounce-subtle">
+              <div className="flex items-center justify-between text-amber-200 font-bold mb-2">
+                <span className="flex items-center gap-2">
+                  <span className="text-xl">⚡</span> XP Earned
+                </span>
+                <span className="text-lg">+{scanResult.gamification.xpEarned} XP</span>
+              </div>
+              <div className="text-xs text-amber-100/70 text-left">
+                {scanResult.isEarly ? "Awesome! Early bird bonus applied!" : "Keep up the good attendance!"}
+              </div>
+              
+              {scanResult.gamification.streak > 0 && (
+                <div className="mt-3 pt-3 border-t border-amber-500/20 flex items-center justify-between text-xs text-amber-200">
+                  <span className="flex items-center gap-1.5">
+                    <span className="text-sm">🔥</span> Current Streak
+                  </span>
+                  <span className="font-bold">{scanResult.gamification.streak} Sessions</span>
+                </div>
+              )}
+              
+              {scanResult.gamification.newBadges?.length > 0 && (
+                <div className="mt-3 space-y-2">
+                  {scanResult.gamification.newBadges.map(badge => (
+                    <div key={badge.key} className="flex items-center gap-2 bg-slate-900/50 p-2 rounded-lg border border-yellow-500/30">
+                      <span className="text-2xl">{badge.emoji}</span>
+                      <div className="text-left">
+                        <div className="text-xs font-bold text-yellow-300">New Badge Unlocked!</div>
+                        <div className="text-xs text-slate-300">{badge.name}</div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
           {/* Receipt Info Box */}
           <div className="p-5 rounded-2xl bg-slate-900/90 border border-slate-800 text-left space-y-3 text-xs">
             <div className="flex items-center justify-between pb-2.5 border-b border-slate-800">

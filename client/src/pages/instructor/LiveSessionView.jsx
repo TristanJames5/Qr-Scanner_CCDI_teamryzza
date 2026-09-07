@@ -288,8 +288,18 @@ export const LiveSessionView = () => {
     }
   };
 
-  const downloadSessionCSV = () => {
-    window.open(`/api/sessions/${sessionId}/export-csv`, '_blank');
+  const downloadSessionCSV = async () => {
+    try {
+      const res = await api.get(`/sessions/${sessionId}/export-csv`, { responseType: 'blob' });
+      const url = URL.createObjectURL(res.data);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `Session_Attendance_${sessionId}.csv`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      alert('Failed to download CSV: ' + (err.response?.data?.error || err.message));
+    }
   };
 
   if (loading) {

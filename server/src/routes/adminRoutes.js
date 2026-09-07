@@ -1137,6 +1137,9 @@ router.get('/analytics/advanced', (req, res) => {
       };
     });
 
+    const totalRecords = db.prepare('SELECT COUNT(*) as c FROM attendance_records').get().c;
+    const auditLogs = db.prepare('SELECT action, details, timestamp FROM admin_audit_logs ORDER BY timestamp DESC LIMIT 10').all();
+
     res.json({
       summary: {
         totalStudents,
@@ -1145,6 +1148,7 @@ router.get('/analytics/advanced', (req, res) => {
         totalSessions,
         activeSessions,
         overallRate,
+        totalRecords,
         breakdown: {
           present: presentCount,
           late: lateCount,
@@ -1157,7 +1161,9 @@ router.get('/analytics/advanced', (req, res) => {
       attendanceTrends,
       forecastTrend,
       sectionComparisons,
-      instructorMetrics
+      topSections: [...sectionComparisons].sort((a, b) => b.rate - a.rate).slice(0, 5),
+      instructorMetrics,
+      auditLogs
     });
   } catch (err) {
     res.status(500).json({ error: 'Failed to compute advanced analytics: ' + err.message });

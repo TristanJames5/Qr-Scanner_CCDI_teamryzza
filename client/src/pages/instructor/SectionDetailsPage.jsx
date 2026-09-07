@@ -44,8 +44,18 @@ export const SectionDetailsPage = () => {
     fetchDetails();
   }, [sectionId]);
 
-  const downloadTermCSV = () => {
-    window.open(`/api/sections/${sectionId}/export-csv`, '_blank');
+  const downloadTermCSV = async () => {
+    try {
+      const res = await api.get(`/sections/${sectionId}/export-csv`, { responseType: 'blob' });
+      const url = URL.createObjectURL(res.data);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `Section_Attendance_${sectionId}.csv`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      alert('Failed to download CSV: ' + (err.response?.data?.error || err.message));
+    }
   };
 
   if (loading) {

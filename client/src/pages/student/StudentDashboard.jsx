@@ -14,7 +14,11 @@ import {
   AlertTriangle,
   TrendingUp,
   MapPin,
-  UserCheck
+  UserCheck,
+  Trophy,
+  Star,
+  Award,
+  Flame
 } from 'lucide-react';
 
 export const StudentDashboard = () => {
@@ -23,12 +27,20 @@ export const StudentDashboard = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
+  const [gamification, setGamification] = useState(null);
+
   useEffect(() => {
     const fetchHistory = async () => {
       try {
         setLoading(true);
-        const res = await api.get('/analytics/student/history');
+        const [res, gamificationRes] = await Promise.all([
+          api.get('/analytics/student/history'),
+          api.get('/gamification/me').catch(e => ({ data: null }))
+        ]);
         setData(res.data);
+        if (gamificationRes.data) {
+          setGamification(gamificationRes.data);
+        }
       } catch (err) {
         setError(err.response?.data?.error || 'Failed to load attendance history');
       } finally {
@@ -120,6 +132,72 @@ export const StudentDashboard = () => {
 
       {/* Announcements Widget */}
       <AnnouncementsWidget />
+
+      {/* Gamification Dashboard */}
+      {gamification && (
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          {/* XP & Level Card */}
+          <div className="glass-card p-6 rounded-2xl border border-amber-500/30 flex flex-col justify-between relative overflow-hidden group">
+            <div className="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity">
+              <Star className="w-24 h-24 text-amber-500" />
+            </div>
+            <div>
+              <div className="flex justify-between items-center mb-2">
+                <span className="text-xs font-bold uppercase tracking-wider text-amber-500 flex items-center gap-1.5"><Trophy className="w-4 h-4" /> Current Level</span>
+                <span className="text-xs font-bold text-amber-200 px-2 py-0.5 rounded-full bg-amber-500/20">Rank #{gamification.rank || '--'}</span>
+              </div>
+              <div className="text-3xl font-black text-white">{gamification.level?.name || 'Beginner'}</div>
+              <div className="text-amber-400 font-bold text-lg">{gamification.totalXP} <span className="text-sm font-medium text-amber-500">XP</span></div>
+            </div>
+            
+            <div className="mt-4">
+              <div className="flex justify-between text-xs mb-1">
+                <span className="text-slate-400">Progress</span>
+                <span className="text-slate-300">{gamification.totalXP} / {gamification.level?.nextLevelXP || 'MAX'} XP</span>
+              </div>
+              <div className="w-full bg-slate-800 h-2 rounded-full overflow-hidden">
+                <div 
+                  className="bg-gradient-to-r from-amber-500 to-yellow-400 h-full rounded-full transition-all duration-1000" 
+                  style={{ width: `${gamification.level?.progressPercent || 100}%` }} 
+                />
+              </div>
+            </div>
+          </div>
+
+          {/* Streak Card */}
+          <div className="glass-card p-6 rounded-2xl border border-orange-500/30 flex items-center justify-between">
+            <div>
+              <div className="text-xs font-bold uppercase tracking-wider text-orange-500 flex items-center gap-1.5 mb-1"><Flame className="w-4 h-4" /> Attendance Streak</div>
+              <div className="text-4xl font-black text-white">{gamification.streak}</div>
+              <div className="text-orange-400 text-xs mt-1">consecutive sessions</div>
+            </div>
+            <div className={`w-16 h-16 flex items-center justify-center rounded-full ${gamification.streak >= 3 ? 'bg-orange-500/20 border-2 border-orange-500 text-4xl' : 'bg-slate-800 text-3xl opacity-50'}`}>
+              🔥
+            </div>
+          </div>
+
+          {/* Badges Preview */}
+          <div className="glass-card p-6 rounded-2xl border border-blue-500/30">
+            <div className="flex justify-between items-center mb-4">
+              <div className="text-xs font-bold uppercase tracking-wider text-blue-400 flex items-center gap-1.5"><Award className="w-4 h-4" /> Recent Badges</div>
+              <Link to="/student/leaderboard" className="text-xs text-blue-400 hover:text-blue-300">View All →</Link>
+            </div>
+            <div className="flex gap-3 overflow-x-auto pb-2 scrollbar-hide">
+              {gamification.badges?.length > 0 ? (
+                gamification.badges.slice(0, 4).map(b => (
+                  <div key={b.badge_key} className="flex-shrink-0 text-center" title={b.badge_name}>
+                    <div className="w-12 h-12 bg-slate-800 rounded-full flex items-center justify-center text-2xl border border-slate-700 shadow-lg shadow-black/50 mx-auto">
+                      {b.badge_emoji}
+                    </div>
+                  </div>
+                ))
+              ) : (
+                <div className="text-xs text-slate-500 w-full text-center py-2">No badges earned yet.</div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Summary KPI Cards */}
       <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">

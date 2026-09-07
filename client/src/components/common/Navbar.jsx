@@ -13,7 +13,9 @@ import {
   History,
   Scan,
   BarChart3,
-  MessageSquare
+  MessageSquare,
+  Trophy,
+  Layers
 } from 'lucide-react';
 
 export const Navbar = () => {
@@ -75,6 +77,15 @@ export const Navbar = () => {
                   <span>Dashboard</span>
                 </Link>
                 <Link
+                  to="/student/leaderboard"
+                  className={`flex items-center space-x-2 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
+                    isActive('/student/leaderboard') ? 'bg-amber-600/20 text-amber-400 border border-amber-500/30' : 'text-slate-300 hover:text-white hover:bg-slate-800/60'
+                  }`}
+                >
+                  <Trophy className="w-4 h-4 text-amber-400" />
+                  <span>Leaderboard</span>
+                </Link>
+                <Link
                   to="/student/scan"
                   className={`flex items-center space-x-2 px-3.5 py-2 rounded-lg text-sm font-semibold shadow-md transition-all ${
                     isActive('/student/scan') 
@@ -97,7 +108,16 @@ export const Navbar = () => {
                   }`}
                 >
                   <LayoutDashboard className="w-4 h-4" />
-                  <span>My Sections</span>
+                  <span>Dashboard</span>
+                </Link>
+                <Link
+                  to="/instructor/sections"
+                  className={`flex items-center space-x-2 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
+                    isActive('/instructor/sections') ? 'bg-blue-600/20 text-blue-400 border border-blue-500/30' : 'text-slate-300 hover:text-white hover:bg-slate-800/60'
+                  }`}
+                >
+                  <Layers className="w-4 h-4 text-blue-400" />
+                  <span>Sections & Subjects</span>
                 </Link>
                 <Link
                   to="/instructor/analytics"

@@ -4,6 +4,7 @@ import db from '../config/db.js';
 import { authenticate } from '../middleware/auth.js';
 import { verifyQRToken, verifyBackupCode } from '../services/qrService.js';
 import { broadcastSessionEvent } from '../socket/socketHandler.js';
+import { awardScanXP } from '../services/gamificationService.js';
 
 const router = express.Router();
 
@@ -104,6 +105,17 @@ router.post('/', authenticate, async (req, res) => {
       VALUES (?, ?, ?, ?, ?, ?, ?, ?)
     `).run(recordId, targetSessionId, student.id, nowIso, attendanceStatus, scanMethod, String(clientIp), String(userAgent));
 
+    // 6b. Award XP & badges
+    const gamification = awardScanXP({
+      studentId: student.id,
+      sectionId: session.section_id,
+      sessionId: targetSessionId,
+      recordId,
+      status: attendanceStatus,
+      diffMinutes,
+      cutoffMinutes
+    });
+
     // 7. Calculate updated stats for real-time broadcast
     const totalEnrolled = db.prepare('SELECT COUNT(*) as count FROM enrollments WHERE section_id = ?').get(session.section_id).count;
     const records = db.prepare('SELECT status, COUNT(*) as count FROM attendance_records WHERE session_id = ? GROUP BY status').all(targetSessionId);
@@ -151,6 +163,8 @@ router.post('/', authenticate, async (req, res) => {
       message: `Attendance marked as ${attendanceStatus.toUpperCase()}!`,
       status: attendanceStatus,
       scannedAt: nowIso,
+      isEarly: attendanceStatus === 'present' && diffMinutes <= 5,
+      gamification,
       session: {
         id: targetSessionId,
         subjectCode: session.subject_code,

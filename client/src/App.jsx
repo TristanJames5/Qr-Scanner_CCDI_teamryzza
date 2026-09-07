@@ -9,7 +9,9 @@ import { RegisterStudentPage } from './pages/RegisterStudentPage';
 import { RegisterStaffPage } from './pages/RegisterStaffPage';
 import { StudentDashboard } from './pages/student/StudentDashboard';
 import { StudentScanPage } from './pages/student/StudentScanPage';
+import { LeaderboardPage } from './pages/student/LeaderboardPage';
 import { InstructorDashboard } from './pages/instructor/InstructorDashboard';
+import { InstructorSectionsPage } from './pages/instructor/InstructorSectionsPage';
 import { LiveSessionView } from './pages/instructor/LiveSessionView';
 import { SectionDetailsPage } from './pages/instructor/SectionDetailsPage';
 import { PatternAlertsPage } from './pages/instructor/PatternAlertsPage';
@@ -73,6 +75,14 @@ export const App = () => {
               </ProtectedRoute>
             }
           />
+          <Route
+            path="/student/leaderboard"
+            element={
+              <ProtectedRoute allowedRoles={['student']}>
+                <LeaderboardPage />
+              </ProtectedRoute>
+            }
+          />
 
           {/* Instructor Routes */}
           <Route
@@ -80,6 +90,14 @@ export const App = () => {
             element={
               <ProtectedRoute allowedRoles={['instructor', 'admin']}>
                 <InstructorDashboard />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/instructor/sections"
+            element={
+              <ProtectedRoute allowedRoles={['instructor', 'admin']}>
+                <InstructorSectionsPage />
               </ProtectedRoute>
             }
           />

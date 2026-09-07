@@ -152,6 +152,32 @@ export function initDatabase() {
     CREATE INDEX IF NOT EXISTS idx_sessions_section ON class_sessions(section_id);
     CREATE INDEX IF NOT EXISTS idx_enrollments_student ON enrollments(student_id);
     CREATE INDEX IF NOT EXISTS idx_enrollments_section ON enrollments(section_id);
+
+    -- Gamification Tables
+    CREATE TABLE IF NOT EXISTS student_xp (
+      id TEXT PRIMARY KEY,
+      student_id TEXT REFERENCES users(id) ON DELETE CASCADE,
+      section_id TEXT REFERENCES sections(id) ON DELETE CASCADE,
+      session_id TEXT REFERENCES class_sessions(id) ON DELETE CASCADE,
+      attendance_record_id TEXT,
+      xp_earned INTEGER NOT NULL DEFAULT 0,
+      reason TEXT,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    );
+
+    CREATE TABLE IF NOT EXISTS student_badges (
+      id TEXT PRIMARY KEY,
+      student_id TEXT REFERENCES users(id) ON DELETE CASCADE,
+      badge_key TEXT NOT NULL,
+      badge_name TEXT NOT NULL,
+      badge_emoji TEXT DEFAULT '🏅',
+      badge_description TEXT,
+      earned_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      UNIQUE(student_id, badge_key)
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_xp_student ON student_xp(student_id);
+    CREATE INDEX IF NOT EXISTS idx_badges_student ON student_badges(student_id);
     CREATE INDEX IF NOT EXISTS idx_admin_audit_time ON admin_audit_logs(timestamp);
   `);
   console.log('Database tables initialized successfully with foreign keys and WAL mode.');
