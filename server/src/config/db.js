@@ -144,8 +144,12 @@ export function initDatabase() {
       subject TEXT,
       message TEXT NOT NULL,
       status TEXT DEFAULT 'sent',
-      sent_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      sent_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      read_at DATETIME
     );
+
+    -- Add read_at column if it doesn't exist yet (for existing databases)
+    CREATE INDEX IF NOT EXISTS idx_notif_recipient ON notification_logs(recipient_id);
 
     CREATE INDEX IF NOT EXISTS idx_attendance_session ON attendance_records(session_id);
     CREATE INDEX IF NOT EXISTS idx_attendance_student ON attendance_records(student_id);
@@ -181,6 +185,13 @@ export function initDatabase() {
     CREATE INDEX IF NOT EXISTS idx_admin_audit_time ON admin_audit_logs(timestamp);
   `);
   console.log('Database tables initialized successfully with foreign keys and WAL mode.');
+
+  // Safe migration: add read_at column to notification_logs if it doesn't exist
+  try {
+    db.exec('ALTER TABLE notification_logs ADD COLUMN read_at DATETIME;');
+  } catch (e) {
+    // Column already exists — ignore
+  }
 }
 
 export function logAdminAction(adminId, adminName, action, targetType, targetId, details) {

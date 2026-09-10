@@ -236,4 +236,39 @@ router.get('/announcements', authenticate, (req, res) => {
   }
 });
 
+
+// -----------------------------------------------------------------
+// Fetch personal alerts/warnings for the authenticated student
+// -----------------------------------------------------------------
+router.get('/my-alerts', authenticate, (req, res) => {
+  try {
+    const alerts = db.prepare(`
+      SELECT id, subject, message, channel, sent_at, read_at
+      FROM notification_logs
+      WHERE recipient_id = ?
+      ORDER BY sent_at DESC
+      LIMIT 50
+    `).all(req.user.id);
+    res.json({ alerts });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to fetch alerts: ' + err.message });
+  }
+});
+
+// Mark a specific alert as read
+router.patch('/my-alerts/:id/read', authenticate, (req, res) => {
+  try {
+    const { id } = req.params;
+    db.prepare(`
+      UPDATE notification_logs
+      SET read_at = CURRENT_TIMESTAMP
+      WHERE id = ? AND recipient_id = ?
+    `).run(id, req.user.id);
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to mark alert as read: ' + err.message });
+  }
+});
+
 export default router;
+

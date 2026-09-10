@@ -4,6 +4,7 @@ import { useAuth } from '../../context/AuthContext';
 import api from '../../api/axios';
 import { StatusBadge, RiskBadge } from '../../components/common/Badge';
 import { AnnouncementsWidget } from '../../components/common/AnnouncementsWidget';
+import { StudentAlertsWidget } from '../../components/common/StudentAlertsWidget';
 import { 
   Scan, 
   BookOpen, 
@@ -132,6 +133,9 @@ export const StudentDashboard = () => {
 
       {/* Announcements Widget */}
       <AnnouncementsWidget />
+
+      {/* Admin Alerts & Warnings Inbox */}
+      <StudentAlertsWidget />
 
       {/* Gamification Dashboard */}
       {gamification && (
