@@ -299,7 +299,7 @@ router.post('/sections/:id/import-roster', (req, res) => {
     })();
 
     res.status(200).json({
-      message: \`Successfully processed \${successCount} students. (\${errorCount} failed)\`,
+      message: `Successfully processed ${successCount} students. (${errorCount} failed)`,
       successCount,
       errorCount,
       errors
