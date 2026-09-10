@@ -283,7 +283,7 @@ router.post('/sections/:id/import-roster', (req, res) => {
           }
           const defaultPassword = bcrypt.hashSync('ccdi123', 10);
           const newId = uuidv4();
-          createStudentStmt.run(newId, id_num, name || id_num, email || \`\${id_num.toLowerCase()}@ccdi.edu.ph\`, defaultPassword);
+          createStudentStmt.run(newId, id_num, name || id_num, email || `${id_num.toLowerCase()}@ccdi.edu.ph`, defaultPassword);
           student = { id: newId };
         }
 
