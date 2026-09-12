@@ -1,0 +1,81 @@
+name: CI
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main]
+
+jobs:
+  # ── Job 1: Security audit ────────────────────────────────────────────────────
+  security:
+    name: Dependency Vulnerability Scan
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Audit server dependencies
+        run: npm audit --audit-level=high
+        working-directory: server
+
+      - name: Audit client dependencies
+        run: npm audit --audit-level=high
+        working-directory: client
+
+  # ── Job 2: Build verification ────────────────────────────────────────────────
+  build:
+    name: Build Verification
+    runs-on: ubuntu-latest
+    needs: security
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+          cache-dependency-path: |
+            server/package-lock.json
+            client/package-lock.json
+
+      - name: Install server dependencies
+        run: npm ci
+        working-directory: server
+
+      - name: Install client dependencies
+        run: npm ci
+        working-directory: client
+
+      - name: Build client
+        run: npm run build
+        working-directory: client
+        env:
+          # Dummy values for build — VITE_ vars are embedded at build time
+          VITE_API_URL: http://localhost:5000
+
+      - name: Verify server starts (smoke test)
+        run: |
+          node src/server.js &
+          SERVER_PID=$!
+          sleep 3
+          # Health check must return 200 with db=connected
+          HEALTH=$(curl -sf http://localhost:5000/api/health)
+          echo "Health response: $HEALTH"
+          echo $HEALTH | grep -q '"status":"ok"'
+          kill $SERVER_PID
+        working-directory: server
+        env:
+          PORT: 5000
+          NODE_ENV: development
+          JWT_SECRET: ci-test-jwt-secret-minimum-32-chars-exactly
+          QR_HMAC_SECRET: ci-test-hmac-secret-minimum-32-chars-ok
+          CLIENT_URL: http://localhost:5173

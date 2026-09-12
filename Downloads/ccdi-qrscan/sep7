@@ -1,0 +1,255 @@
+# CCDI QRScan — Major Feature Upgrade Plan
+### Senior Developer Implementation Spec
+
+---
+
+## 🎯 Executive Summary
+
+Four major feature groups with precise scoping:
+
+| # | Feature | Scope | Complexity |
+|---|---------|-------|-----------|
+| 1 | **Instructor Sections & Subjects Portal** | Full CRUD — no admin needed | High |
+| 2 | **Student Gamification (XP + Streak + Leaderboard)** | New DB tables, points engine, UI | High |
+| 3 | **Admin Portal Enhancements** | Richer dashboard, audit, system health | Medium |
+| 4 | **CSV Export Token Bug Fix** | Auth header injection | Low |
+
+---
+
+## 🔴 BUG FIX FIRST — CSV Export Auth Token (Critical)
+
+### Root Cause
+`window.open('/api/...')` opens a plain browser tab with **no `Authorization: Bearer` header** — the server returns `401 Unauthorized`, which users see as a vague "token" error.
+
+### Fix Strategy
+Replace all `window.open()` CSV calls with **fetch-then-blob-download** pattern using the axios instance (which already injects the JWT).
+
+#### Files to Fix
+- [`LiveSessionView.jsx`](file:///c:/Users/JAYLO/Downloads/ccdi-qrscan/ccdi-qrscan/client/src/pages/instructor/LiveSessionView.jsx) — `downloadSessionCSV()`
+- [`SectionDetailsPage.jsx`](file:///c:/Users/JAYLO/Downloads/ccdi-qrscan/ccdi-qrscan/client/src/pages/instructor/SectionDetailsPage.jsx) — `downloadTermCSV()`
+- [`AttendanceInsightsPage.jsx`](file:///c:/Users/JAYLO/Downloads/ccdi-qrscan/ccdi-qrscan/client/src/pages/instructor/AttendanceInsightsPage.jsx) — all report downloads
+
+**Pattern:**
+```js
+const downloadCSV = async (url, filename) => {
+  const res = await api.get(url, { responseType: 'blob' });
+  const href = URL.createObjectURL(res.data);
+  const a = document.createElement('a');
+  a.href = href; a.download = filename; a.click();
+  URL.revokeObjectURL(href);
+};
+```
+
+---
+
+## 1️⃣ Instructor Sections & Subjects Portal
+
+### Goal
+Instructors can fully manage their own sections and subjects — create, edit, delete, manage student rosters — **without needing admin access**.
+
+### DB Changes (none — uses existing schema)
+No new tables needed. Re-use `sections`, `subjects`, `enrollments` tables with instructor-scoped access control.
+
+### Backend — New Instructor Routes
+
+#### [MODIFY] [`instructorRoutes.js`](file:///c:/Users/JAYLO/Downloads/ccdi-qrscan/ccdi-qrscan/server/src/routes/instructorRoutes.js)
+
+Add instructor-scoped section/subject management endpoints:
+
+| Method | Path | Action |
+|--------|------|--------|
+| `GET` | `/instructor/my-sections` | List all sections assigned to logged-in instructor |
+| `POST` | `/instructor/sections` | Create a new section (auto-assigns to self) |
+| `PUT` | `/instructor/sections/:id` | Edit section (room, schedule, term) — only own sections |
+| `DELETE` | `/instructor/sections/:id` | Delete section (only if no sessions held) |
+| `GET` | `/instructor/subjects` | List all subjects (for section creation dropdowns) |
+| `POST` | `/instructor/subjects` | Create a new subject |
+| `GET` | `/instructor/sections/:id/roster` | Get enrolled students |
+| `POST` | `/instructor/sections/:id/enroll` | Add student to roster by ID number |
+| `DELETE` | `/instructor/sections/:id/roster/:studentId` | Remove student from roster |
+
+**Security rule:** Every PUT/DELETE endpoint checks `section.instructor_id === req.user.id` before mutating.
+
+### Frontend — New Pages
+
+#### [NEW] `InstructorSectionsPage.jsx` → `/instructor/sections`
+
+Exact clone of the Admin `ManageSectionsPage` but **scoped to the instructor's own sections** with the same visual design shown in the screenshot:
+
+- **Header:** "Sections & Subjects" with subtitle + Sections/Subjects toggle tabs
+- **Sections tab:** Cards grid — each shows section name, subject code, enrolled count, room, schedule, instructor (self), Manage Roster + Edit + Delete buttons
+- **Subjects tab:** Table of all subjects with Create Subject button
+- **Create Section Modal:** Form fields — Section Name, Subject (dropdown), Room, Schedule, Academic Term
+- **Manage Roster Modal/Page:** Table of enrolled students with Add (by ID number search) + Remove buttons
+
+#### [MODIFY] [`Navbar.jsx`](file:///c:/Users/JAYLO/Downloads/ccdi-qrscan/ccdi-qrscan/client/src/components/common/Navbar.jsx)
+Add "Sections & Subjects" nav link for instructors.
+
+#### [MODIFY] [`App.jsx`](file:///c:/Users/JAYLO/Downloads/ccdi-qrscan/ccdi-qrscan/client/src/App.jsx)
+Add route `/instructor/sections`.
+
+---
+
+## 2️⃣ Student Gamification System
+
+### XP Points Formula
+
+| Attendance Status | Timing | XP Earned |
+|-------------------|--------|-----------|
+| **Present (Early)** | Scanned 0–5 min after session start | **+100 XP** |
+| **Present (On-Time)** | Scanned 5–cutoff min | **+75 XP** |
+| **Late** | After cutoff | **+25 XP** |
+| **Excused** | Manual override | **+40 XP** |
+| **Absent** | Not scanned | **−20 XP** (floored at 0) |
+
+> Early = `diffMinutes < 5`. Present = `5 ≤ diffMinutes ≤ cutoff`. Late = `diffMinutes > cutoff`.
+
+### Streak System
+- **Daily streak**: consecutive class sessions attended (present or late) without an unexcused absence
+- Streak resets on `absent` status
+- Streak badges unlocked at 3, 5, 10, 15, 20, 30 consecutive sessions
+
+### Badges
+
+| Badge | Trigger |
+|-------|---------|
+| 🔥 **First Scan** | First ever QR scan |
+| ⚡ **Early Bird** | 5× early arrival (< 5 min) |
+| 💎 **Perfect Week** | 3-session streak |
+| 🏆 **5-Session Streak** | 5 consecutive present/late |
+| 🌟 **10-Session Legend** | 10 consecutive sessions |
+| 🚀 **Punctuality King** | 10× early attendance |
+| 📚 **Semester Scholar** | ≥ 90% attendance rate all-time |
+
+### DB Changes
+
+```sql
+-- New tables to add in db.js initDatabase()
+
+CREATE TABLE IF NOT EXISTS student_xp (
+  id TEXT PRIMARY KEY,
+  student_id TEXT REFERENCES users(id) ON DELETE CASCADE,
+  section_id TEXT REFERENCES sections(id) ON DELETE CASCADE,
+  session_id TEXT REFERENCES class_sessions(id) ON DELETE CASCADE,
+  attendance_record_id TEXT,
+  xp_earned INTEGER NOT NULL DEFAULT 0,
+  reason TEXT,  -- 'early_present', 'on_time_present', 'late', 'excused', 'absent_deduction'
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS student_badges (
+  id TEXT PRIMARY KEY,
+  student_id TEXT REFERENCES users(id) ON DELETE CASCADE,
+  badge_key TEXT NOT NULL,  -- 'first_scan', 'early_bird', 'streak_3', etc.
+  badge_name TEXT NOT NULL,
+  badge_emoji TEXT,
+  earned_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE(student_id, badge_key)
+);
+
+CREATE INDEX IF NOT EXISTS idx_xp_student ON student_xp(student_id);
+CREATE INDEX IF NOT EXISTS idx_badges_student ON student_badges(student_id);
+```
+
+### Backend Changes
+
+#### [MODIFY] [`scanRoutes.js`](file:///c:/Users/JAYLO/Downloads/ccdi-qrscan/ccdi-qrscan/server/src/routes/scanRoutes.js)
+After recording attendance, also:
+1. Calculate XP based on `diffMinutes` vs cutoff (early/on-time/late)
+2. Insert into `student_xp` table
+3. Recalculate streak, unlock any new badges
+4. Return `xpEarned`, `totalXP`, `currentStreak`, `newBadges` in scan response
+
+#### [MODIFY] [`sessionRoutes.js`](file:///c:/Users/JAYLO/Downloads/ccdi-qrscan/ccdi-qrscan/server/src/routes/sessionRoutes.js)  
+When session closes and absent records are auto-inserted: deduct XP for each absent student.
+
+#### [NEW] `gamificationRoutes.js`
+
+| Method | Path | Action |
+|--------|------|--------|
+| `GET` | `/gamification/me` | My XP total, rank, streak, badges |
+| `GET` | `/gamification/leaderboard` | Top 20 students by total XP (school-wide or per section) |
+| `GET` | `/gamification/leaderboard/section/:id` | Section-specific leaderboard |
+
+### Frontend Changes
+
+#### [MODIFY] [`StudentDashboard.jsx`](file:///c:/Users/JAYLO/Downloads/ccdi-qrscan/ccdi-qrscan/client/src/pages/student/StudentDashboard.jsx)
+- Add **XP card** with current total, rank, and animated progress bar to next level
+- Add **Streak card** with fire emoji and streak count
+- Add **Badges showcase** row with earned badge chips (greyed-out for locked)
+- Add **Leaderboard preview** — top 5 students with View Full button
+
+#### [NEW] `LeaderboardPage.jsx` → `/student/leaderboard`
+- Full leaderboard table with ranks, avatars, names, XP, streak, top badge
+- Section filter dropdown
+- Podium display for top 3 (gold/silver/bronze)
+- Highlight current user's row
+
+#### [MODIFY] [`StudentScanPage.jsx`](file:///c:/Users/JAYLO/Downloads/ccdi-qrscan/ccdi-qrscan/client/src/pages/student/StudentScanPage.jsx)
+- After successful scan: show animated XP gain banner (`+100 XP ⚡ Early Bird!`)
+- Show streak counter
+- Show any newly unlocked badge with celebration animation
+
+#### [MODIFY] [`Navbar.jsx`](file:///c:/Users/JAYLO/Downloads/ccdi-qrscan/ccdi-qrscan/client/src/components/common/Navbar.jsx)
+- Add "🏆 Leaderboard" nav link for students
+
+---
+
+## 3️⃣ Admin Portal Enhancements
+
+### New Admin Dashboard Panels
+
+#### [MODIFY] [`AdminDashboard.jsx`](file:///c:/Users/JAYLO/Downloads/ccdi-qrscan/ccdi-qrscan/client/src/pages/admin/AdminDashboard.jsx)
+- **System Health widget** — Active sessions, DB record count, last login
+- **Top Performing Sections** — Table ranked by avg attendance rate
+- **At-Risk Summary** — Count of students below 75% across all sections
+- **Recent Admin Activity Log** — Audit trail of admin actions (already logged in DB)
+- **Quick Actions bar** — Export all sections CSV, Reset a user password, Create announcement
+
+#### [MODIFY] [`adminRoutes.js`](file:///c:/Users/JAYLO/Downloads/ccdi-qrscan/ccdi-qrscan/server/src/routes/adminRoutes.js) 
+Expose the `/admin/analytics/advanced` endpoint to include:
+- Top performing sections ranked by avg rate
+- At-risk student count
+- XP leaderboard summary (once gamification table exists)
+- System stats (total records, active sessions, last login times)
+
+---
+
+## 📂 Full File Change Summary
+
+### New Files
+| File | Purpose |
+|------|---------|
+| `server/src/routes/gamificationRoutes.js` | XP, leaderboard, badges API |
+| `client/src/pages/instructor/InstructorSectionsPage.jsx` | Instructor section management |
+| `client/src/pages/student/LeaderboardPage.jsx` | Global/section leaderboard |
+
+### Modified Files
+| File | What Changes |
+|------|-------------|
+| `server/src/config/db.js` | Add `student_xp` and `student_badges` tables |
+| `server/src/routes/scanRoutes.js` | Award XP + badges on scan |
+| `server/src/routes/sessionRoutes.js` | Deduct XP on absent close |
+| `server/src/routes/instructorRoutes.js` | Section/subject CRUD endpoints |
+| `server/src/routes/adminRoutes.js` | Richer analytics + audit log endpoint |
+| `server/src/server.js` | Register gamificationRoutes |
+| `client/src/pages/student/StudentDashboard.jsx` | XP card, streak, badges, leaderboard preview |
+| `client/src/pages/student/StudentScanPage.jsx` | XP gain animation on scan |
+| `client/src/pages/instructor/LiveSessionView.jsx` | Fix CSV download (blob fetch) |
+| `client/src/pages/instructor/SectionDetailsPage.jsx` | Fix CSV download (blob fetch) |
+| `client/src/pages/instructor/AttendanceInsightsPage.jsx` | Fix CSV download (blob fetch) |
+| `client/src/pages/admin/AdminDashboard.jsx` | Enhanced widgets + audit log |
+| `client/src/components/common/Navbar.jsx` | Sections link (instructor), Leaderboard link (student) |
+| `client/src/App.jsx` | Add 2 new routes |
+
+---
+
+## 🔢 Execution Order
+
+1. **DB schema migration** (add XP + badge tables) — no data loss
+2. **CSV fix** (quick win, isolated change)
+3. **Gamification backend** (scanRoutes + gamificationRoutes)
+4. **Gamification frontend** (StudentDashboard + ScanPage + LeaderboardPage)
+5. **Instructor Sections portal** (backend routes + frontend page)
+6. **Admin enhancements** (dashboard widgets)
+7. **Git commit + push**
