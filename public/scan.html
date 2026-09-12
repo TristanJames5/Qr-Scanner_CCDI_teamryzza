@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>CCDI QRScan - Mark Present</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body class="student-body">
+    <div class="container student-container">
+        <header>
+            <h1>CCDI QRScan</h1>
+            <p>Student Attendance</p>
+        </header>
+
+        <main class="card scan-card">
+            <div id="statusMessage" class="alert" style="display: none;"></div>
+
+            <form id="attendanceForm">
+                <div class="form-group">
+                    <label for="sectionSelect">Section:</label>
+                    <select id="sectionSelect" required disabled>
+                        <option value="">Loading...</option>
+                    </select>
+                </div>
+
+                <div class="form-group">
+                    <label for="studentSelect">Your Name:</label>
+                    <select id="studentSelect" required disabled>
+                        <option value="">-- Select your name --</option>
+                    </select>
+                </div>
+
+                <button type="submit" id="submitBtn" class="btn btn-primary btn-block" disabled>Mark Present</button>
+            </form>
+        </main>
+    </div>
+
+    <script>
+        const API_URL = '';
+        let targetSectionId = null;
+
+        document.addEventListener('DOMContentLoaded', async () => {
+            // Get section ID from URL query param (passed from the QR code)
+            const urlParams = new URLSearchParams(window.location.search);
+            targetSectionId = urlParams.get('section');
+
+            const sectionSelect = document.getElementById('sectionSelect');
+            const studentSelect = document.getElementById('studentSelect');
+            
+            if (!targetSectionId) {
+                showStatus('Invalid QR Code. Missing section info.', 'error');
+                return;
+            }
+
+            try {
+                // Fetch sections to display the name
+                const secRes = await fetch(`${API_URL}/api/sections`);
+                const sections = await secRes.json();
+                
+                const currentSection = sections.find(s => s.id == targetSectionId);
+                if (currentSection) {
+                    sectionSelect.innerHTML = `<option value="${currentSection.id}" selected>${currentSection.name}</option>`;
+                } else {
+                    showStatus('Invalid section.', 'error');
+                    return;
+                }
+
+                // Fetch students for this section
+                const stuRes = await fetch(`${API_URL}/api/students/${targetSectionId}`);
+                const students = await stuRes.json();
+                
+                studentSelect.innerHTML = '<option value="">-- Select your name --</option>';
+                students.forEach(stu => {
+                    const option = document.createElement('option');
+                    option.value = stu.id;
+                    option.textContent = stu.name;
+                    studentSelect.appendChild(option);
+                });
+
+                studentSelect.disabled = false;
+                
+                // Enable button only when a student is selected
+                studentSelect.addEventListener('change', (e) => {
+                    document.getElementById('submitBtn').disabled = !e.target.value;
+                });
+
+            } catch (err) {
+                showStatus('Network error connecting to PC.', 'error');
+                console.error(err);
+            }
+        });
+
+        document.getElementById('attendanceForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const studentId = document.getElementById('studentSelect').value;
+            const submitBtn = document.getElementById('submitBtn');
+            
+            if (!studentId || !targetSectionId) return;
+
+            submitBtn.disabled = true;
+            submitBtn.textContent = 'Submitting...';
+
+            try {
+                const res = await fetch(`${API_URL}/api/attendance`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ studentId, sectionId: targetSectionId })
+                });
+                
+                const data = await res.json();
+                
+                if (res.ok) {
+                    showStatus('✅ Attendance recorded!', 'success');
+                    document.getElementById('attendanceForm').reset();
+                } else if (res.status === 409) {
+                    showStatus('⚠️ Already present today.', 'warning');
+                } else {
+                    showStatus('Error: ' + (data.error || 'Unknown error'), 'error');
+                }
+            } catch (err) {
+                showStatus('Network error.', 'error');
+                console.error(err);
+            } finally {
+                submitBtn.disabled = false;
+                submitBtn.textContent = 'Mark Present';
+            }
+        });
+
+        function showStatus(message, type) {
+            const el = document.getElementById('statusMessage');
+            el.textContent = message;
+            el.className = `alert alert-${type}`;
+            el.style.display = 'block';
+        }
+    </script>
+</body>
+</html>
