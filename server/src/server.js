@@ -26,6 +26,7 @@ import adminRoutes from './routes/adminRoutes.js';
 import excuseRoutes from './routes/excuseRoutes.js';
 import promptRoutes from './routes/promptRoutes.js';
 import gamificationRoutes from './routes/gamificationRoutes.js';
+import instructorRoutes from './routes/instructorRoutes.js';
 
 dotenv.config();
 
@@ -144,6 +145,7 @@ app.use('/api/admin', adminRoutes);
 app.use('/api/excuses', excuseRoutes);
 app.use('/api/prompts', promptRoutes);
 app.use('/api/gamification', gamificationRoutes);
+app.use('/api/instructor', instructorRoutes);
 
 // Serve Frontend Production Build (if dist folder exists)
 const clientDistPath = path.resolve(__dirname, '../../client/dist');

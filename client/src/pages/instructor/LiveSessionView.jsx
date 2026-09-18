@@ -32,6 +32,7 @@ export const LiveSessionView = () => {
   const { id: sessionId } = useParams();
   const navigate = useNavigate();
   const { socket, joinSession, leaveSession } = useSocket();
+  const { promptLeaderboard } = useSocket();
 
   const [sessionData, setSessionData] = useState(null);
   const [tokenData, setTokenData] = useState(null);
@@ -204,9 +205,9 @@ export const LiveSessionView = () => {
             const osc = audioCtx.createOscillator();
             const gain = audioCtx.createGain();
             osc.type = 'sine';
-            osc.frequency.setValueAtTime(523.25, audioCtx.currentTime); // C5
-            osc.frequency.setValueAtTime(659.25, audioCtx.currentTime + 0.2); // E5
-            osc.frequency.setValueAtTime(783.99, audioCtx.currentTime + 0.4); // G5
+            osc.frequency.setValueAtTime(523.25, audioCtx.currentTime);
+            osc.frequency.setValueAtTime(659.25, audioCtx.currentTime + 0.2);
+            osc.frequency.setValueAtTime(783.99, audioCtx.currentTime + 0.4);
             gain.gain.setValueAtTime(0.2, audioCtx.currentTime);
             gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 1);
             osc.connect(gain);
@@ -215,6 +216,12 @@ export const LiveSessionView = () => {
             osc.stop(audioCtx.currentTime + 1);
           } catch(e) {}
         }
+      });
+
+      // 6. When all questions done, leaderboard fires => clear recap panel
+      socket.on('prompt:leaderboard', () => {
+        setActivePrompt(null);
+        setPromptStats(null);
       });
     }
 
@@ -227,6 +234,7 @@ export const LiveSessionView = () => {
         socket.off('session_closed');
         socket.off('prompt:update');
         socket.off('prompt:reveal');
+        socket.off('prompt:leaderboard');
       }
     };
   }, [sessionId, socket, joinSession, leaveSession, soundEnabled]);

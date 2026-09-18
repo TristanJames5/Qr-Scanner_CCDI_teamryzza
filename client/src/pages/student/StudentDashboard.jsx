@@ -5,6 +5,7 @@ import api from '../../api/axios';
 import { StatusBadge, RiskBadge } from '../../components/common/Badge';
 import { AnnouncementsWidget } from '../../components/common/AnnouncementsWidget';
 import { StudentAlertsWidget } from '../../components/common/StudentAlertsWidget';
+import { useSocket } from '../../context/SocketContext';
 import { 
   Scan, 
   BookOpen, 
@@ -24,14 +25,15 @@ import {
 
 export const StudentDashboard = () => {
   const { user } = useAuth();
+  const { joinSession, leaveSession } = useSocket();
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
-
   const [gamification, setGamification] = useState(null);
+  const [activeSessionId, setActiveSessionId] = useState(null);
 
   useEffect(() => {
-    const fetchHistory = async () => {
+      const fetchHistory = async () => {
       try {
         setLoading(true);
         const [res, gamificationRes] = await Promise.all([
@@ -39,9 +41,21 @@ export const StudentDashboard = () => {
           api.get('/gamification/me').catch(e => ({ data: null }))
         ]);
         setData(res.data);
-        if (gamificationRes.data) {
-          setGamification(gamificationRes.data);
-        }
+        if (gamificationRes.data) setGamification(gamificationRes.data);
+
+        // Auto-join any active session so Quick Recap socket events reach this student
+        const activeSessions = (res.data?.sections || []).flatMap(sec =>
+          sec.sessions ? sec.sessions.filter(s => s.status === 'active') : []
+        );
+        // Also check top-level active session via a simple sections fetch
+        try {
+          const secRes = await api.get('/sections');
+          const liveId = (secRes.data?.sections || []).find(s => s.active_session_id)?.active_session_id;
+          if (liveId) {
+            setActiveSessionId(liveId);
+            joinSession(liveId);
+          }
+        } catch (_) {}
       } catch (err) {
         setError(err.response?.data?.error || 'Failed to load attendance history');
       } finally {
@@ -50,6 +64,11 @@ export const StudentDashboard = () => {
     };
     fetchHistory();
   }, []);
+
+  // Leave session room when unmounting
+  useEffect(() => {
+    return () => { if (activeSessionId) leaveSession(activeSessionId); };
+  }, [activeSessionId]);
 
   if (loading) {
     return (
