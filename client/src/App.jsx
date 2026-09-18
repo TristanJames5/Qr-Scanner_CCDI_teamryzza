@@ -12,6 +12,8 @@ import { LiveSessionView } from './pages/instructor/LiveSessionView';
 import { SectionDetailsPage } from './pages/instructor/SectionDetailsPage';
 import { PatternAlertsPage } from './pages/instructor/PatternAlertsPage';
 import { ExcuseReviewPage } from './pages/instructor/ExcuseReviewPage';
+import { InstructorSectionsPage } from './pages/instructor/InstructorSectionsPage';
+import { AttendanceInsightsPage } from './pages/instructor/AttendanceInsightsPage';
 import { AdminDashboard } from './pages/admin/AdminDashboard';
 import { ManageUsersPage } from './pages/admin/ManageUsersPage';
 import { ManageSectionsPage } from './pages/admin/ManageSectionsPage';
@@ -92,6 +94,22 @@ export const App = () => {
             element={
               <ProtectedRoute allowedRoles={['instructor', 'admin']}>
                 <SectionDetailsPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/instructor/sections"
+            element={
+              <ProtectedRoute allowedRoles={['instructor', 'admin']}>
+                <InstructorSectionsPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/instructor/analytics"
+            element={
+              <ProtectedRoute allowedRoles={['instructor', 'admin']}>
+                <AttendanceInsightsPage />
               </ProtectedRoute>
             }
           />

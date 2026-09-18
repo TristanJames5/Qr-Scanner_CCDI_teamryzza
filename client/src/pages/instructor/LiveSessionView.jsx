@@ -41,6 +41,7 @@ export const LiveSessionView = () => {
   // Countdown timer for 30s rotation
   const [timeLeft, setTimeLeft] = useState(30);
   const [isRotating, setIsRotating] = useState(false);
+  const [promptTimeLeft, setPromptTimeLeft] = useState(0);
 
   // Audio chime & UI controls
   const [soundEnabled, setSoundEnabled] = useState(true);
@@ -247,6 +248,25 @@ export const LiveSessionView = () => {
 
     return () => clearInterval(timer);
   }, [sessionData, sessionId]);
+
+  // Prompt Timer & Auto-Termination
+  useEffect(() => {
+    if (!activePrompt || promptStats?.correctOption) return;
+
+    const interval = setInterval(() => {
+      const left = Math.max(0, Math.ceil((activePrompt.end_time - Date.now()) / 1000));
+      setPromptTimeLeft(left);
+      
+      if (left <= 0) {
+        handleEndPromptEarly();
+        clearInterval(interval);
+      }
+    }, 1000);
+
+    setPromptTimeLeft(Math.max(0, Math.ceil((activePrompt.end_time - Date.now()) / 1000)));
+
+    return () => clearInterval(interval);
+  }, [activePrompt, promptStats?.correctOption]);
 
   const handleRotateToken = async () => {
     try {
@@ -575,7 +595,7 @@ export const LiveSessionView = () => {
                     <Zap className="w-4 h-4" /> LIVE RECAP
                   </span>
                   <span className="text-xl font-mono font-bold text-slate-300">
-                    {Math.max(0, Math.ceil((activePrompt.end_time - Date.now()) / 1000))}s
+                    {promptTimeLeft}s
                   </span>
                 </div>
 
