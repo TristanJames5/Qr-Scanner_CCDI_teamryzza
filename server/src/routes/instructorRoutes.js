@@ -259,7 +259,7 @@ router.post('/sections/:id/import-roster', (req, res) => {
     const findStudentStmt = db.prepare(`SELECT id FROM users WHERE (LOWER(id_number) = LOWER(?) OR LOWER(email) = LOWER(?)) AND role = 'student'`);
     const checkEnrollmentStmt = db.prepare(`SELECT id FROM enrollments WHERE section_id = ? AND student_id = ?`);
     const enrollStmt = db.prepare(`INSERT INTO enrollments (id, student_id, section_id) VALUES (?, ?, ?)`);
-    const createStudentStmt = db.prepare(`INSERT INTO users (id, id_number, name, email, password, role) VALUES (?, ?, ?, ?, ?, 'student')`);
+    const createStudentStmt = db.prepare(`INSERT INTO users (id, id_number, name, email, password_hash, role) VALUES (?, ?, ?, ?, ?, 'student')`);
 
     db.transaction(() => {
       for (const row of students) {

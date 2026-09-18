@@ -216,7 +216,8 @@ export function initDatabase() {
       subject TEXT,
       message TEXT NOT NULL,
       status TEXT DEFAULT 'sent',
-      sent_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      sent_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      read_at DATETIME
     );
   `);
   
@@ -225,6 +226,7 @@ export function initDatabase() {
   try { db.exec("ALTER TABLE session_prompts ADD COLUMN group_id TEXT;"); } catch (e) {}
   try { db.exec("ALTER TABLE session_prompts ADD COLUMN image_url TEXT;"); } catch (e) {}
   try { db.exec("ALTER TABLE session_prompts ADD COLUMN end_time INTEGER;"); } catch (e) {}
+  try { db.exec("ALTER TABLE notification_logs ADD COLUMN read_at DATETIME;"); } catch (e) {}
 
   console.log('Database tables initialized successfully with foreign keys and WAL mode.');
 }

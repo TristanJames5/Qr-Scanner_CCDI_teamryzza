@@ -138,7 +138,9 @@ router.post('/:promptId/submit', authenticate, (req, res) => {
 
         if (isCorrect) {
             const maxTime = prompt.time_limit_seconds * 1000;
-            const timeTaken = Math.min(responseTimeMs, maxTime);
+            // Secure calculation based on server's expected start time to prevent cheating
+            const startTime = prompt.end_time - maxTime;
+            const timeTaken = Math.max(0, Math.min(Date.now() - startTime, maxTime));
             points = Math.round(100 * (1 - (timeTaken / (2 * maxTime))));
         }
 
