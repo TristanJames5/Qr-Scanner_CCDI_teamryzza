@@ -32,6 +32,7 @@ export function initDatabase() {
       role TEXT CHECK(role IN ('admin', 'instructor', 'student')) NOT NULL,
       department TEXT DEFAULT 'College of Information & Communications Technology',
       avatar_url TEXT,
+      total_xp INTEGER DEFAULT 0,
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP
     );
 
@@ -122,7 +123,9 @@ export function initDatabase() {
     CREATE TABLE IF NOT EXISTS session_prompts (
       id TEXT PRIMARY KEY,
       session_id TEXT NOT NULL,
+      group_id TEXT,
       question_text TEXT NOT NULL,
+      image_url TEXT,
       options_json TEXT NOT NULL,
       correct_option TEXT NOT NULL,
       time_limit_seconds INTEGER DEFAULT 20,
@@ -215,6 +218,12 @@ export function initDatabase() {
       sent_at DATETIME DEFAULT CURRENT_TIMESTAMP
     );
   `);
+  
+  // Safe Migrations for existing DBs
+  try { db.exec("ALTER TABLE users ADD COLUMN total_xp INTEGER DEFAULT 0;"); } catch (e) {}
+  try { db.exec("ALTER TABLE session_prompts ADD COLUMN group_id TEXT;"); } catch (e) {}
+  try { db.exec("ALTER TABLE session_prompts ADD COLUMN image_url TEXT;"); } catch (e) {}
+
   console.log('Database tables initialized successfully with foreign keys and WAL mode.');
 }
 

@@ -32,7 +32,7 @@ router.get('/session/:sessionId/active', authenticate, (req, res) => {
 router.post('/session/:sessionId/launch', authenticate, authorize('instructor'), (req, res) => {
   try {
     const { sessionId } = req.params;
-    const { question_text, options, correct_option, time_limit_seconds } = req.body;
+    const { question_text, options, correct_option, time_limit_seconds, image_url, group_id } = req.body;
 
     // Verify session belongs to instructor and is active
     const session = db.prepare('SELECT id FROM class_sessions WHERE id = ? AND instructor_id = ? AND status = ?').get(sessionId, req.user.id, 'active');
@@ -44,13 +44,15 @@ router.post('/session/:sessionId/launch', authenticate, authorize('instructor'),
     const optionsJson = JSON.stringify(options); // [{id: 'A', text: '...'}, ...]
 
     db.prepare(`
-      INSERT INTO session_prompts (id, session_id, question_text, options_json, correct_option, time_limit_seconds, status)
-      VALUES (?, ?, ?, ?, ?, ?, 'active')
-    `).run(promptId, sessionId, question_text, optionsJson, correct_option, time_limit_seconds || 20);
+      INSERT INTO session_prompts (id, session_id, group_id, question_text, image_url, options_json, correct_option, time_limit_seconds, status)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'active')
+    `).run(promptId, sessionId, group_id || null, question_text, image_url || null, optionsJson, correct_option, time_limit_seconds || 20);
 
     const prompt = {
         id: promptId,
+        group_id: group_id || null,
         question_text,
+        image_url: image_url || null,
         options,
         time_limit_seconds: time_limit_seconds || 20,
         end_time: Date.now() + ((time_limit_seconds || 20) * 1000)
@@ -123,6 +125,10 @@ router.post('/:promptId/submit', authenticate, (req, res) => {
                 INSERT INTO prompt_responses (id, prompt_id, student_id, selected_option, is_correct, points_awarded)
                 VALUES (?, ?, ?, ?, ?, ?)
             `).run(uuidv4(), promptId, studentId, selectedOption, isCorrect ? 1 : 0, points);
+
+            if (points > 0) {
+                db.prepare(`UPDATE users SET total_xp = total_xp + ? WHERE id = ?`).run(points, studentId);
+            }
         } catch (e) {
             if (e.message.includes('UNIQUE constraint failed')) {
                  return res.status(400).json({ error: 'Already answered' });

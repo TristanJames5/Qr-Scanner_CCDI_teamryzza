@@ -63,7 +63,9 @@ export const LiveSessionView = () => {
 
   // Active Presence Pop-Quiz (Quick Recap)
   const [showPromptModal, setShowPromptModal] = useState(false);
-  const [promptDraft, setPromptDraft] = useState({ question_text: '', options: [{id:'A', text:''}, {id:'B', text:''}, {id:'C', text:''}, {id:'D', text:''}], correct_option: 'A', time_limit_seconds: 20 });
+  const defaultQuestion = () => ({ id: Math.random().toString(), question_text: '', image_url: '', options: [{id:'A', text:''}, {id:'B', text:''}, {id:'C', text:''}, {id:'D', text:''}], correct_option: 'A', time_limit_seconds: 20 });
+  const [promptDeck, setPromptDeck] = useState([defaultQuestion()]);
+  const [activeDeckQueue, setActiveDeckQueue] = useState([]);
   const [activePrompt, setActivePrompt] = useState(null);
   const [promptStats, setPromptStats] = useState(null); // { answeredCount, totalPresent, distribution: {...} }
 
@@ -194,6 +196,24 @@ export const LiveSessionView = () => {
       });
       socket.on('prompt:reveal', (data) => {
         setPromptStats((prev) => ({ ...prev, distribution: data.stats, correctOption: data.correctOption }));
+        // Play reveal sound
+        if (soundEnabled) {
+          try {
+            const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+            const osc = audioCtx.createOscillator();
+            const gain = audioCtx.createGain();
+            osc.type = 'sine';
+            osc.frequency.setValueAtTime(523.25, audioCtx.currentTime); // C5
+            osc.frequency.setValueAtTime(659.25, audioCtx.currentTime + 0.2); // E5
+            osc.frequency.setValueAtTime(783.99, audioCtx.currentTime + 0.4); // G5
+            gain.gain.setValueAtTime(0.2, audioCtx.currentTime);
+            gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 1);
+            osc.connect(gain);
+            gain.connect(audioCtx.destination);
+            osc.start();
+            osc.stop(audioCtx.currentTime + 1);
+          } catch(e) {}
+        }
       });
     }
 
@@ -312,19 +332,94 @@ export const LiveSessionView = () => {
 
   const handleLaunchPrompt = async (e) => {
     e.preventDefault();
+    if (promptDeck.length === 0) return;
+    
+    // Play start sound
+    if (soundEnabled) {
+      try {
+        const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        const osc = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+        osc.type = 'square';
+        osc.frequency.setValueAtTime(440, audioCtx.currentTime);
+        osc.frequency.setValueAtTime(660, audioCtx.currentTime + 0.1);
+        gain.gain.setValueAtTime(0.1, audioCtx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.5);
+        osc.connect(gain);
+        gain.connect(audioCtx.destination);
+        osc.start();
+        osc.stop(audioCtx.currentTime + 0.5);
+      } catch(e) {}
+    }
+
+    const firstQ = promptDeck[0];
+    const groupId = Math.random().toString(36).substring(7);
+
     try {
-      const res = await api.post(`/prompts/session/${sessionId}/launch`, promptDraft);
+      const res = await api.post(`/prompts/session/${sessionId}/launch`, { ...firstQ, group_id: groupId });
       setActivePrompt({
-        ...promptDraft,
+        ...firstQ,
         id: res.data.promptId,
-        end_time: Date.now() + (promptDraft.time_limit_seconds * 1000)
+        end_time: Date.now() + (firstQ.time_limit_seconds * 1000)
       });
       setPromptStats({ answeredCount: 0, totalPresent: sessionData.stats?.present + sessionData.stats?.late || 0 });
+      setActiveDeckQueue(promptDeck.slice(1).map(q => ({ ...q, group_id: groupId })));
       setShowPromptModal(false);
     } catch (err) {
       console.error('Failed to launch prompt', err);
       alert('Failed to launch recap quiz.');
     }
+  };
+
+  const handleNextPrompt = async () => {
+    if (activeDeckQueue.length === 0) {
+       setActivePrompt(null);
+       setPromptStats(null);
+       return;
+    }
+    
+    if (soundEnabled) {
+      try {
+        const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        const osc = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+        osc.frequency.setValueAtTime(440, audioCtx.currentTime);
+        osc.frequency.setValueAtTime(660, audioCtx.currentTime + 0.1);
+        gain.gain.setValueAtTime(0.1, audioCtx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.5);
+        osc.connect(gain);
+        gain.connect(audioCtx.destination);
+        osc.start();
+        osc.stop(audioCtx.currentTime + 0.5);
+      } catch(e) {}
+    }
+
+    const nextQ = activeDeckQueue[0];
+    try {
+      const res = await api.post(`/prompts/session/${sessionId}/launch`, nextQ);
+      setActivePrompt({
+        ...nextQ,
+        id: res.data.promptId,
+        end_time: Date.now() + (nextQ.time_limit_seconds * 1000)
+      });
+      setPromptStats({ answeredCount: 0, totalPresent: sessionData.stats?.present + sessionData.stats?.late || 0 });
+      setActiveDeckQueue(prev => prev.slice(1));
+    } catch (err) {
+      console.error('Failed to launch prompt', err);
+      alert('Failed to launch recap quiz.');
+    }
+  };
+
+  const handleImageUpload = (e, index) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onloadend = () => {
+       const newDeck = [...promptDeck];
+       newDeck[index].image_url = reader.result;
+       setPromptDeck(newDeck);
+    };
+    reader.readAsDataURL(file);
   };
 
   if (loading) {
@@ -477,6 +572,9 @@ export const LiveSessionView = () => {
                 <h3 className="text-xl sm:text-2xl font-bold text-white text-center mb-6 leading-relaxed">
                   {activePrompt.question_text}
                 </h3>
+                {activePrompt.image_url && (
+                  <img src={activePrompt.image_url} alt="Question Context" className="max-h-48 rounded-xl mx-auto mb-6 object-contain shadow-lg" />
+                )}
 
                 {promptStats?.correctOption ? (
                   <div className="space-y-3">
@@ -496,8 +594,8 @@ export const LiveSessionView = () => {
                         </div>
                       )
                     })}
-                    <button onClick={() => { setActivePrompt(null); setPromptStats(null); }} className="w-full mt-4 py-3 bg-slate-800 hover:bg-slate-700 rounded-xl text-white font-bold transition-colors">
-                      Back to QR Code
+                    <button onClick={handleNextPrompt} className="w-full mt-4 py-3 bg-amber-500 hover:bg-amber-400 rounded-xl text-slate-900 font-bold transition-colors shadow-lg shadow-amber-900/40">
+                      {activeDeckQueue.length > 0 ? `Next Question (${activeDeckQueue.length} left)` : "Finish Recap"}
                     </button>
                   </div>
                 ) : (
@@ -845,61 +943,107 @@ export const LiveSessionView = () => {
         title="Launch Quick Recap"
         subtitle="Verify active presence and award bonus points."
       >
-        <form onSubmit={handleLaunchPrompt} className="space-y-4">
-          <div>
-            <label className="block text-xs font-semibold text-slate-300 mb-1">Question Text</label>
-            <input
-              type="text"
-              required
-              value={promptDraft.question_text}
-              onChange={(e) => setPromptDraft({ ...promptDraft, question_text: e.target.value })}
-              className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-sm text-white focus:ring-2 focus:ring-amber-500"
-              placeholder="e.g. What is the Big-O time complexity of Binary Search?"
-            />
-          </div>
-          
-          <div className="grid grid-cols-2 gap-3">
-            {promptDraft.options.map((opt, i) => (
-              <div key={opt.id} className="space-y-1">
-                <label className="text-xs font-semibold text-slate-400 flex items-center gap-2">
+        <form onSubmit={handleLaunchPrompt} className="space-y-6">
+          <div className="max-h-[60vh] overflow-y-auto space-y-8 pr-2">
+            {promptDeck.map((q, qIndex) => (
+              <div key={q.id} className="p-4 rounded-xl border border-slate-700 bg-slate-900/50 space-y-4 relative">
+                {promptDeck.length > 1 && (
+                  <button type="button" onClick={() => setPromptDeck(promptDeck.filter((_, i) => i !== qIndex))} className="absolute top-2 right-2 text-rose-400 hover:text-rose-300">
+                    <XCircle className="w-5 h-5" />
+                  </button>
+                )}
+                <div className="flex justify-between items-center text-amber-500 font-bold text-xs uppercase tracking-wider">
+                  Question {qIndex + 1}
+                </div>
+                
+                <div>
+                  <label className="block text-xs font-semibold text-slate-300 mb-1">Question Text</label>
                   <input
-                    type="radio"
-                    name="correct_option"
-                    checked={promptDraft.correct_option === opt.id}
-                    onChange={() => setPromptDraft({ ...promptDraft, correct_option: opt.id })}
-                    className="text-amber-500 focus:ring-amber-500"
+                    type="text"
+                    required
+                    value={q.question_text}
+                    onChange={(e) => {
+                      const newDeck = [...promptDeck];
+                      newDeck[qIndex].question_text = e.target.value;
+                      setPromptDeck(newDeck);
+                    }}
+                    className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-sm text-white focus:ring-2 focus:ring-amber-500"
+                    placeholder="e.g. What is the Big-O time complexity of Binary Search?"
                   />
-                  Option {opt.id}
-                </label>
-                <input
-                  type="text"
-                  required
-                  value={opt.text}
-                  onChange={(e) => {
-                    const newOpts = [...promptDraft.options];
-                    newOpts[i].text = e.target.value;
-                    setPromptDraft({ ...promptDraft, options: newOpts });
-                  }}
-                  className={`w-full bg-slate-950 border ${promptDraft.correct_option === opt.id ? 'border-amber-500' : 'border-slate-700'} rounded-xl px-3 py-2 text-sm text-white`}
-                  placeholder={`Answer ${opt.id}...`}
-                />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-slate-300 mb-1">Optional Photo</label>
+                  <input
+                    type="file"
+                    accept="image/*"
+                    onChange={(e) => handleImageUpload(e, qIndex)}
+                    className="block w-full text-xs text-slate-400 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-xs file:font-semibold file:bg-amber-500 file:text-slate-900 hover:file:bg-amber-400"
+                  />
+                  {q.image_url && <img src={q.image_url} alt="Preview" className="mt-2 h-16 rounded-md border border-slate-700 object-contain" />}
+                </div>
+                
+                <div className="grid grid-cols-2 gap-3">
+                  {q.options.map((opt, i) => (
+                    <div key={opt.id} className="space-y-1">
+                      <label className="text-xs font-semibold text-slate-400 flex items-center gap-2">
+                        <input
+                          type="radio"
+                          name={`correct_option_${q.id}`}
+                          checked={q.correct_option === opt.id}
+                          onChange={() => {
+                            const newDeck = [...promptDeck];
+                            newDeck[qIndex].correct_option = opt.id;
+                            setPromptDeck(newDeck);
+                          }}
+                          className="text-amber-500 focus:ring-amber-500"
+                        />
+                        Option {opt.id}
+                      </label>
+                      <input
+                        type="text"
+                        required
+                        value={opt.text}
+                        onChange={(e) => {
+                          const newDeck = [...promptDeck];
+                          newDeck[qIndex].options[i].text = e.target.value;
+                          setPromptDeck(newDeck);
+                        }}
+                        className={`w-full bg-slate-950 border ${q.correct_option === opt.id ? 'border-amber-500' : 'border-slate-700'} rounded-xl px-3 py-2 text-sm text-white`}
+                        placeholder={`Answer ${opt.id}...`}
+                      />
+                    </div>
+                  ))}
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-slate-300 mb-1">Time Limit (Seconds)</label>
+                  <input
+                    type="number"
+                    required
+                    min="5" max="120"
+                    value={q.time_limit_seconds}
+                    onChange={(e) => {
+                      const newDeck = [...promptDeck];
+                      newDeck[qIndex].time_limit_seconds = parseInt(e.target.value) || 20;
+                      setPromptDeck(newDeck);
+                    }}
+                    className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-sm text-white focus:ring-2 focus:ring-amber-500"
+                  />
+                </div>
               </div>
             ))}
           </div>
+          
+          <button
+            type="button"
+            onClick={() => setPromptDeck([...promptDeck, defaultQuestion()])}
+            className="w-full py-2 border-2 border-dashed border-slate-700 hover:border-amber-500 rounded-xl text-xs font-bold text-slate-400 hover:text-amber-500 transition-colors"
+          >
+            + Add Another Question
+          </button>
 
-          <div>
-            <label className="block text-xs font-semibold text-slate-300 mb-1">Time Limit (Seconds)</label>
-            <input
-              type="number"
-              required
-              min="5" max="120"
-              value={promptDraft.time_limit_seconds}
-              onChange={(e) => setPromptDraft({ ...promptDraft, time_limit_seconds: parseInt(e.target.value) || 20 })}
-              className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-sm text-white focus:ring-2 focus:ring-amber-500"
-            />
-          </div>
-
-          <div className="pt-2 flex gap-2">
+          <div className="pt-2 flex gap-2 border-t border-slate-800">
             <button
               type="button"
               onClick={() => setShowPromptModal(false)}
@@ -912,7 +1056,7 @@ export const LiveSessionView = () => {
               className="flex-1 py-2.5 rounded-xl text-xs font-bold text-slate-900 bg-amber-500 hover:bg-amber-400 shadow-lg shadow-amber-900/40 flex justify-center items-center gap-2"
             >
               <Zap className="w-4 h-4" />
-              Launch Now
+              Launch Deck ({promptDeck.length})
             </button>
           </div>
         </form>

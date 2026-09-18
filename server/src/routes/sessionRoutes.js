@@ -275,8 +275,31 @@ router.post('/:id/close', authenticate, authorize('instructor', 'admin'), (req, 
       VALUES (?, ?, ?, ?, 'absent', 'manual_override', 'system', 'Auto-closed Absent')
     `);
 
+    const insertExcused = db.prepare(`
+      INSERT INTO attendance_records (id, session_id, student_id, scanned_at, status, method, ip_address, user_agent)
+      VALUES (?, ?, ?, ?, 'excused', 'manual_override', 'system', 'Auto-excused from Advance Notice')
+    `);
+
+    const checkExcuse = db.prepare(`
+      SELECT id FROM excuse_letters 
+      WHERE student_id = ? AND section_id = ? AND target_date = ? AND status = 'approved'
+    `);
+
+    const updateExcuse = db.prepare(`
+      UPDATE excuse_letters SET attendance_record_id = ? WHERE id = ?
+    `);
+
     unscannedStudents.forEach(stu => {
-      insertAbsent.run(uuidv4(), id, stu.id, nowIso);
+      const recordId = uuidv4();
+      // Check if student has an approved advance excuse for this session date
+      const excuse = checkExcuse.get(stu.id, session.section_id, session.date);
+      
+      if (excuse) {
+        insertExcused.run(recordId, id, stu.id, nowIso);
+        updateExcuse.run(recordId, excuse.id);
+      } else {
+        insertAbsent.run(recordId, id, stu.id, nowIso);
+      }
     });
 
     // Mark session closed

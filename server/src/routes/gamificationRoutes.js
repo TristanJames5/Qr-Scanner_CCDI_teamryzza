@@ -1,41 +1,75 @@
 import express from 'express';
-import { authenticate, authorize } from '../middleware/auth.js';
-import {
-  getStudentGamificationProfile,
-  getLeaderboard,
-  getXPLevel
-} from '../services/gamificationService.js';
+import { authenticate } from '../middleware/auth.js';
+import db from '../config/db.js';
 
 const router = express.Router();
 
-// GET /gamification/me — Student's own XP, rank, streak, badges, level
 router.get('/me', authenticate, (req, res) => {
   try {
-    const profile = getStudentGamificationProfile(req.user.id);
-    res.json(profile);
-  } catch (err) {
-    res.status(500).json({ error: 'Failed to fetch gamification profile: ' + err.message });
-  }
-});
+    const studentId = req.user.id;
+    
+    // Fetch user total XP
+    const user = db.prepare('SELECT total_xp FROM users WHERE id = ?').get(studentId);
+    if (!user) {
+      return res.status(404).json({ error: 'User not found' });
+    }
 
-// GET /gamification/leaderboard — School-wide top 20
-router.get('/leaderboard', authenticate, (req, res) => {
-  try {
-    const { limit = 20 } = req.query;
-    const board = getLeaderboard({ limit: parseInt(limit) || 20 });
-    res.json({ leaderboard: board });
-  } catch (err) {
-    res.status(500).json({ error: 'Failed to fetch leaderboard: ' + err.message });
-  }
-});
+    const totalXP = user.total_xp || 0;
 
-// GET /gamification/leaderboard/section/:id — Section-scoped leaderboard
-router.get('/leaderboard/section/:id', authenticate, (req, res) => {
-  try {
-    const board = getLeaderboard({ sectionId: req.params.id, limit: 50 });
-    res.json({ leaderboard: board });
+    // Simple leveling logic
+    let levelName = 'Beginner';
+    let nextLevelXP = 100;
+    
+    if (totalXP >= 5000) {
+      levelName = 'Master';
+      nextLevelXP = 10000;
+    } else if (totalXP >= 2500) {
+      levelName = 'Expert';
+      nextLevelXP = 5000;
+    } else if (totalXP >= 1000) {
+      levelName = 'Scholar';
+      nextLevelXP = 2500;
+    } else if (totalXP >= 500) {
+      levelName = 'Enthusiast';
+      nextLevelXP = 1000;
+    } else if (totalXP >= 100) {
+      levelName = 'Learner';
+      nextLevelXP = 500;
+    }
+
+    let progressPercent = 0;
+    if (totalXP >= 10000) {
+        progressPercent = 100;
+    } else {
+        const prevLevelXP = nextLevelXP === 100 ? 0 : 
+                            nextLevelXP === 500 ? 100 : 
+                            nextLevelXP === 1000 ? 500 : 
+                            nextLevelXP === 2500 ? 1000 : 
+                            nextLevelXP === 5000 ? 2500 : 5000;
+        
+        progressPercent = Math.min(100, Math.round(((totalXP - prevLevelXP) / (nextLevelXP - prevLevelXP)) * 100));
+    }
+
+    // Rank (Count users with higher XP)
+    const rankRow = db.prepare('SELECT COUNT(*) as higher_count FROM users WHERE total_xp > ?').get(totalXP);
+    const rank = (rankRow.higher_count || 0) + 1;
+
+    // Streak (Simplistic for now - could be queried from attendance records)
+    const streak = 0; 
+    
+    res.json({
+      totalXP,
+      level: {
+        name: levelName,
+        nextLevelXP,
+        progressPercent
+      },
+      streak,
+      rank,
+      badges: []
+    });
   } catch (err) {
-    res.status(500).json({ error: 'Failed to fetch section leaderboard: ' + err.message });
+    res.status(500).json({ error: 'Failed to fetch gamification stats' });
   }
 });
 

@@ -49,6 +49,36 @@ export const ActivePromptOverlay = () => {
           spread: 70,
           origin: { y: 0.6 }
         });
+        try {
+          const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+          const osc = audioCtx.createOscillator();
+          const gain = audioCtx.createGain();
+          osc.type = 'sine';
+          osc.frequency.setValueAtTime(523.25, audioCtx.currentTime); // C5
+          osc.frequency.setValueAtTime(659.25, audioCtx.currentTime + 0.1); // E5
+          osc.frequency.setValueAtTime(783.99, audioCtx.currentTime + 0.2); // G5
+          gain.gain.setValueAtTime(0.2, audioCtx.currentTime);
+          gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 1);
+          osc.connect(gain);
+          gain.connect(audioCtx.destination);
+          osc.start();
+          osc.stop(audioCtx.currentTime + 1);
+        } catch(e) {}
+      } else {
+        try {
+          const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+          const osc = audioCtx.createOscillator();
+          const gain = audioCtx.createGain();
+          osc.type = 'sawtooth';
+          osc.frequency.setValueAtTime(150, audioCtx.currentTime);
+          osc.frequency.setValueAtTime(100, audioCtx.currentTime + 0.3);
+          gain.gain.setValueAtTime(0.2, audioCtx.currentTime);
+          gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.6);
+          osc.connect(gain);
+          gain.connect(audioCtx.destination);
+          osc.start();
+          osc.stop(audioCtx.currentTime + 0.6);
+        } catch(e) {}
       }
     }
   }, [promptReveal, selectedOption]);
@@ -129,6 +159,9 @@ export const ActivePromptOverlay = () => {
           <h2 className="text-2xl sm:text-3xl md:text-4xl font-extrabold text-center leading-tight">
             {activePrompt.question_text}
           </h2>
+          {activePrompt.image_url && (
+            <img src={activePrompt.image_url} alt="Question Context" className="mt-6 max-h-40 rounded-xl mx-auto object-contain shadow-lg border border-slate-700" />
+          )}
         </div>
 
         {/* Status / Result Overlay (if answered or revealed) */}
