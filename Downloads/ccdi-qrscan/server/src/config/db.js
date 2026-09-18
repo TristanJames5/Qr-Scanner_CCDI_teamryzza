@@ -117,6 +117,35 @@ export function initDatabase() {
     CREATE INDEX IF NOT EXISTS idx_sessions_section_status
       ON class_sessions(section_id, status);
 
+    -- ── S-Class: Active Presence (Pop Quizzes) ───────────────────────────────
+    CREATE TABLE IF NOT EXISTS session_prompts (
+      id TEXT PRIMARY KEY,
+      session_id TEXT NOT NULL,
+      question_text TEXT NOT NULL,
+      options_json TEXT NOT NULL,
+      correct_option TEXT NOT NULL,
+      time_limit_seconds INTEGER DEFAULT 20,
+      status TEXT CHECK(status IN ('draft', 'active', 'completed')) DEFAULT 'draft',
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (session_id) REFERENCES class_sessions(id) ON DELETE CASCADE
+    );
+
+    CREATE TABLE IF NOT EXISTS prompt_responses (
+      id TEXT PRIMARY KEY,
+      prompt_id TEXT NOT NULL,
+      student_id TEXT NOT NULL,
+      selected_option TEXT NOT NULL,
+      is_correct BOOLEAN NOT NULL,
+      points_awarded INTEGER DEFAULT 0,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (prompt_id) REFERENCES session_prompts(id) ON DELETE CASCADE,
+      FOREIGN KEY (student_id) REFERENCES users(id) ON DELETE CASCADE,
+      UNIQUE(prompt_id, student_id)
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_session_prompts ON session_prompts(session_id);
+    CREATE INDEX IF NOT EXISTS idx_prompt_responses_student ON prompt_responses(student_id);
+
     -- ── S-Class: Excuse Letter Workflow ──────────────────────────────────────
     CREATE TABLE IF NOT EXISTS excuse_requests (
       id TEXT PRIMARY KEY,

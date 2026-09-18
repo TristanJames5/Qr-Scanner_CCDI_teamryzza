@@ -15,6 +15,7 @@ import { ExcuseReviewPage } from './pages/instructor/ExcuseReviewPage';
 import { AdminDashboard } from './pages/admin/AdminDashboard';
 import { ManageUsersPage } from './pages/admin/ManageUsersPage';
 import { ManageSectionsPage } from './pages/admin/ManageSectionsPage';
+import { ActivePromptOverlay } from './components/student/ActivePromptOverlay';
 
 // Protected Route Wrapper
 const ProtectedRoute = ({ children, allowedRoles }) => {
@@ -47,6 +48,7 @@ export const App = () => {
     <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col font-['Inter',sans-serif]">
       <Navbar />
       <main className="flex-1">
+        <ActivePromptOverlay />
         <Routes>
           <Route path="/login" element={<LoginPage />} />
 
