@@ -23,7 +23,9 @@ import {
   Edit3, 
   History, 
   Sparkles,
-  ArrowLeft
+  ArrowLeft,
+  Zap,
+  BarChart3
 } from 'lucide-react';
 
 export const LiveSessionView = () => {
@@ -58,6 +60,12 @@ export const LiveSessionView = () => {
 
   // Live incoming scan activity stream (latest 6 scans)
   const [recentScans, setRecentScans] = useState([]);
+
+  // Active Presence Pop-Quiz (Quick Recap)
+  const [showPromptModal, setShowPromptModal] = useState(false);
+  const [promptDraft, setPromptDraft] = useState({ question_text: '', options: [{id:'A', text:''}, {id:'B', text:''}, {id:'C', text:''}, {id:'D', text:''}], correct_option: 'A', time_limit_seconds: 20 });
+  const [activePrompt, setActivePrompt] = useState(null);
+  const [promptStats, setPromptStats] = useState(null); // { answeredCount, totalPresent, distribution: {...} }
 
   // Fullscreen container ref
   const containerRef = useRef(null);
@@ -179,6 +187,14 @@ export const LiveSessionView = () => {
         });
         setTokenData(null);
       });
+
+      // 5. Active Prompt (Quick Recap) Updates
+      socket.on('prompt:update', (data) => {
+        setPromptStats((prev) => ({ ...prev, ...data }));
+      });
+      socket.on('prompt:reveal', (data) => {
+        setPromptStats((prev) => ({ ...prev, distribution: data.stats, correctOption: data.correctOption }));
+      });
     }
 
     return () => {
@@ -188,6 +204,8 @@ export const LiveSessionView = () => {
         socket.off('student_scanned');
         socket.off('manual_override_updated');
         socket.off('session_closed');
+        socket.off('prompt:update');
+        socket.off('prompt:reveal');
       }
     };
   }, [sessionId, socket, joinSession, leaveSession, soundEnabled]);
@@ -288,17 +306,24 @@ export const LiveSessionView = () => {
     }
   };
 
-  const downloadSessionCSV = async () => {
+  const downloadSessionCSV = () => {
+    window.open(`/api/sessions/${sessionId}/export-csv`, '_blank');
+  };
+
+  const handleLaunchPrompt = async (e) => {
+    e.preventDefault();
     try {
-      const res = await api.get(`/sessions/${sessionId}/export-csv`, { responseType: 'blob' });
-      const url = URL.createObjectURL(res.data);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `Session_Attendance_${sessionId}.csv`;
-      a.click();
-      URL.revokeObjectURL(url);
+      const res = await api.post(`/prompts/session/${sessionId}/launch`, promptDraft);
+      setActivePrompt({
+        ...promptDraft,
+        id: res.data.promptId,
+        end_time: Date.now() + (promptDraft.time_limit_seconds * 1000)
+      });
+      setPromptStats({ answeredCount: 0, totalPresent: sessionData.stats?.present + sessionData.stats?.late || 0 });
+      setShowPromptModal(false);
     } catch (err) {
-      alert('Failed to download CSV: ' + (err.response?.data?.error || err.message));
+      console.error('Failed to launch prompt', err);
+      alert('Failed to launch recap quiz.');
     }
   };
 
@@ -396,6 +421,16 @@ export const LiveSessionView = () => {
             <span className="hidden sm:inline">{isFullscreen ? 'Exit Fullscreen' : 'Projector View'}</span>
           </button>
 
+          {isActive && (
+            <button
+              onClick={() => setShowPromptModal(true)}
+              className="p-2.5 rounded-xl bg-gradient-to-r from-yellow-500 to-amber-600 hover:from-yellow-400 hover:to-amber-500 text-slate-900 text-xs font-extrabold flex items-center gap-1.5 transition-colors shadow-lg shadow-amber-900/20"
+            >
+              <Zap className="w-4 h-4" />
+              <span>Quick Recap</span>
+            </button>
+          )}
+
           <button
             onClick={downloadSessionCSV}
             className="p-2.5 rounded-xl bg-slate-900 hover:bg-slate-800 border border-slate-800 text-slate-300 text-xs font-semibold flex items-center gap-1.5 transition-colors"
@@ -420,7 +455,76 @@ export const LiveSessionView = () => {
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
         {/* Left Column: Rotating Dynamic QR Code (Large Display for Projector) */}
         <div className="lg:col-span-5 flex flex-col items-center justify-center glass-panel p-6 sm:p-8 rounded-3xl border border-slate-800 relative shadow-2xl">
-          {isActive && tokenData ? (
+          {isActive && activePrompt ? (
+            <div className="w-full flex flex-col items-center space-y-6 animate-in fade-in zoom-in duration-500">
+              <div className="w-full bg-slate-900 rounded-2xl p-6 border-2 border-amber-500/50 relative overflow-hidden shadow-[0_0_40px_-10px_rgba(245,158,11,0.3)]">
+                <div className="absolute top-0 left-0 w-full h-1 bg-slate-800">
+                  <div 
+                    className="h-full bg-amber-400 transition-all duration-1000 ease-linear"
+                    style={{ width: `${Math.max(0, ((activePrompt.end_time - Date.now()) / (activePrompt.time_limit_seconds * 1000)) * 100)}%` }}
+                  ></div>
+                </div>
+                
+                <div className="flex justify-between items-center mb-4">
+                  <span className="px-3 py-1 bg-amber-500/20 text-amber-400 rounded-full text-xs font-bold flex items-center gap-1.5">
+                    <Zap className="w-4 h-4" /> LIVE RECAP
+                  </span>
+                  <span className="text-xl font-mono font-bold text-slate-300">
+                    {Math.max(0, Math.ceil((activePrompt.end_time - Date.now()) / 1000))}s
+                  </span>
+                </div>
+
+                <h3 className="text-xl sm:text-2xl font-bold text-white text-center mb-6 leading-relaxed">
+                  {activePrompt.question_text}
+                </h3>
+
+                {promptStats?.correctOption ? (
+                  <div className="space-y-3">
+                    <h4 className="text-sm font-semibold text-slate-400 text-center mb-2">Results</h4>
+                    {activePrompt.options.map((opt) => {
+                      const count = promptStats.distribution?.[opt.id] || 0;
+                      const total = promptStats.answeredCount || 1;
+                      const pct = Math.round((count / total) * 100);
+                      const isCorrect = opt.id === promptStats.correctOption;
+                      
+                      return (
+                        <div key={opt.id} className={`relative p-3 rounded-xl border ${isCorrect ? 'border-emerald-500/50 bg-emerald-500/10' : 'border-slate-800 bg-slate-950/50'} flex justify-between items-center z-10 overflow-hidden`}>
+                          <div className={`absolute top-0 left-0 h-full ${isCorrect ? 'bg-emerald-500/20' : 'bg-slate-800/50'} -z-10 transition-all duration-1000`} style={{ width: `${pct}%` }}></div>
+                          <span className={`font-semibold ${isCorrect ? 'text-emerald-400' : 'text-slate-300'}`}>{opt.id}: {opt.text}</span>
+                          <span className="text-sm font-mono text-slate-400">{count} ({pct}%)</span>
+                          {isCorrect && <CheckCircle2 className="w-5 h-5 text-emerald-400" />}
+                        </div>
+                      )
+                    })}
+                    <button onClick={() => { setActivePrompt(null); setPromptStats(null); }} className="w-full mt-4 py-3 bg-slate-800 hover:bg-slate-700 rounded-xl text-white font-bold transition-colors">
+                      Back to QR Code
+                    </button>
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-2 gap-3">
+                    {activePrompt.options.map((opt, i) => {
+                      const colors = ['bg-rose-600', 'bg-blue-600', 'bg-amber-500', 'bg-emerald-600'];
+                      return (
+                        <div key={opt.id} className={`${colors[i % 4]} rounded-xl p-4 flex flex-col items-center justify-center min-h-[100px] text-center shadow-lg`}>
+                          <span className="text-white/70 text-sm font-bold mb-1">{opt.id}</span>
+                          <span className="text-white font-bold text-sm sm:text-base leading-tight drop-shadow-md">{opt.text}</span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+              
+              {!promptStats?.correctOption && (
+                <div className="flex items-center gap-3 px-6 py-3 bg-slate-900 rounded-full border border-slate-800">
+                  <Users className="w-5 h-5 text-blue-400" />
+                  <span className="font-semibold text-slate-300">
+                    <span className="text-white text-lg">{promptStats?.answeredCount || 0}</span> / {promptStats?.totalPresent || 0} Answered
+                  </span>
+                </div>
+              )}
+            </div>
+          ) : isActive && tokenData ? (
             <div className="w-full flex flex-col items-center space-y-6 text-center">
               {/* Dynamic rotation timer badge */}
               <div className="flex items-center justify-between w-full max-w-xs">
@@ -733,6 +837,85 @@ export const LiveSessionView = () => {
             </button>
           </div>
         </div>
+      </Modal>
+      {/* Quick Recap Creation Modal */}
+      <Modal
+        isOpen={showPromptModal}
+        onClose={() => setShowPromptModal(false)}
+        title="Launch Quick Recap"
+        subtitle="Verify active presence and award bonus points."
+      >
+        <form onSubmit={handleLaunchPrompt} className="space-y-4">
+          <div>
+            <label className="block text-xs font-semibold text-slate-300 mb-1">Question Text</label>
+            <input
+              type="text"
+              required
+              value={promptDraft.question_text}
+              onChange={(e) => setPromptDraft({ ...promptDraft, question_text: e.target.value })}
+              className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-sm text-white focus:ring-2 focus:ring-amber-500"
+              placeholder="e.g. What is the Big-O time complexity of Binary Search?"
+            />
+          </div>
+          
+          <div className="grid grid-cols-2 gap-3">
+            {promptDraft.options.map((opt, i) => (
+              <div key={opt.id} className="space-y-1">
+                <label className="text-xs font-semibold text-slate-400 flex items-center gap-2">
+                  <input
+                    type="radio"
+                    name="correct_option"
+                    checked={promptDraft.correct_option === opt.id}
+                    onChange={() => setPromptDraft({ ...promptDraft, correct_option: opt.id })}
+                    className="text-amber-500 focus:ring-amber-500"
+                  />
+                  Option {opt.id}
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={opt.text}
+                  onChange={(e) => {
+                    const newOpts = [...promptDraft.options];
+                    newOpts[i].text = e.target.value;
+                    setPromptDraft({ ...promptDraft, options: newOpts });
+                  }}
+                  className={`w-full bg-slate-950 border ${promptDraft.correct_option === opt.id ? 'border-amber-500' : 'border-slate-700'} rounded-xl px-3 py-2 text-sm text-white`}
+                  placeholder={`Answer ${opt.id}...`}
+                />
+              </div>
+            ))}
+          </div>
+
+          <div>
+            <label className="block text-xs font-semibold text-slate-300 mb-1">Time Limit (Seconds)</label>
+            <input
+              type="number"
+              required
+              min="5" max="120"
+              value={promptDraft.time_limit_seconds}
+              onChange={(e) => setPromptDraft({ ...promptDraft, time_limit_seconds: parseInt(e.target.value) || 20 })}
+              className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-sm text-white focus:ring-2 focus:ring-amber-500"
+            />
+          </div>
+
+          <div className="pt-2 flex gap-2">
+            <button
+              type="button"
+              onClick={() => setShowPromptModal(false)}
+              className="flex-1 py-2.5 rounded-xl text-xs font-semibold text-slate-400 bg-slate-800 hover:bg-slate-700"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              className="flex-1 py-2.5 rounded-xl text-xs font-bold text-slate-900 bg-amber-500 hover:bg-amber-400 shadow-lg shadow-amber-900/40 flex justify-center items-center gap-2"
+            >
+              <Zap className="w-4 h-4" />
+              Launch Now
+            </button>
+          </div>
+        </form>
       </Modal>
     </div>
   );

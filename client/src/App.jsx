@@ -5,22 +5,17 @@ import { Navbar } from './components/common/Navbar';
 
 // Pages
 import { LoginPage } from './pages/LoginPage';
-import { RegisterStudentPage } from './pages/RegisterStudentPage';
-import { RegisterStaffPage } from './pages/RegisterStaffPage';
 import { StudentDashboard } from './pages/student/StudentDashboard';
 import { StudentScanPage } from './pages/student/StudentScanPage';
-import { LeaderboardPage } from './pages/student/LeaderboardPage';
 import { InstructorDashboard } from './pages/instructor/InstructorDashboard';
-import { InstructorSectionsPage } from './pages/instructor/InstructorSectionsPage';
 import { LiveSessionView } from './pages/instructor/LiveSessionView';
 import { SectionDetailsPage } from './pages/instructor/SectionDetailsPage';
 import { PatternAlertsPage } from './pages/instructor/PatternAlertsPage';
-import { AttendanceInsightsPage } from './pages/instructor/AttendanceInsightsPage';
+import { ExcuseReviewPage } from './pages/instructor/ExcuseReviewPage';
 import { AdminDashboard } from './pages/admin/AdminDashboard';
 import { ManageUsersPage } from './pages/admin/ManageUsersPage';
 import { ManageSectionsPage } from './pages/admin/ManageSectionsPage';
-import { AdminLogsPage } from './pages/admin/AdminLogsPage';
-
+import { ActivePromptOverlay } from './components/student/ActivePromptOverlay';
 
 // Protected Route Wrapper
 const ProtectedRoute = ({ children, allowedRoles }) => {
@@ -53,10 +48,9 @@ export const App = () => {
     <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col font-['Inter',sans-serif]">
       <Navbar />
       <main className="flex-1">
+        <ActivePromptOverlay />
         <Routes>
           <Route path="/login" element={<LoginPage />} />
-          <Route path="/register/student" element={<RegisterStudentPage />} />
-          <Route path="/register/staff" element={<RegisterStaffPage />} />
 
           {/* Student Routes */}
           <Route
@@ -75,14 +69,6 @@ export const App = () => {
               </ProtectedRoute>
             }
           />
-          <Route
-            path="/student/leaderboard"
-            element={
-              <ProtectedRoute allowedRoles={['student']}>
-                <LeaderboardPage />
-              </ProtectedRoute>
-            }
-          />
 
           {/* Instructor Routes */}
           <Route
@@ -90,14 +76,6 @@ export const App = () => {
             element={
               <ProtectedRoute allowedRoles={['instructor', 'admin']}>
                 <InstructorDashboard />
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="/instructor/sections"
-            element={
-              <ProtectedRoute allowedRoles={['instructor', 'admin']}>
-                <InstructorSectionsPage />
               </ProtectedRoute>
             }
           />
@@ -126,10 +104,10 @@ export const App = () => {
             }
           />
           <Route
-            path="/instructor/analytics"
+            path="/instructor/excuses"
             element={
               <ProtectedRoute allowedRoles={['instructor', 'admin']}>
-                <AttendanceInsightsPage />
+                <ExcuseReviewPage />
               </ProtectedRoute>
             }
           />
@@ -159,15 +137,6 @@ export const App = () => {
               </ProtectedRoute>
             }
           />
-          <Route
-            path="/admin/logs"
-            element={
-              <ProtectedRoute allowedRoles={['admin']}>
-                <AdminLogsPage />
-              </ProtectedRoute>
-            }
-          />
-
 
           {/* Default Redirect */}
           <Route path="*" element={<Navigate to="/login" replace />} />

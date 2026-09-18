@@ -100,110 +100,72 @@ export function initDatabase() {
       timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
     );
 
-    CREATE TABLE IF NOT EXISTS admin_audit_logs (
-      id TEXT PRIMARY KEY,
-      admin_id TEXT REFERENCES users(id) ON DELETE SET NULL,
-      admin_name TEXT,
-      action TEXT NOT NULL,
-      target_type TEXT NOT NULL,
-      target_id TEXT,
-      details TEXT,
-      timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
-    );
-
-    CREATE TABLE IF NOT EXISTS announcements (
-      id TEXT PRIMARY KEY,
-      author_id TEXT REFERENCES users(id) ON DELETE SET NULL,
-      author_name TEXT,
-      title TEXT NOT NULL,
-      content TEXT NOT NULL,
-      target_audience TEXT CHECK(target_audience IN ('all', 'students', 'instructors')) DEFAULT 'all',
-      priority TEXT CHECK(priority IN ('normal', 'urgent', 'info')) DEFAULT 'normal',
-      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-    );
-
-    CREATE TABLE IF NOT EXISTS absence_excuse_requests (
-      id TEXT PRIMARY KEY,
-      student_id TEXT REFERENCES users(id) ON DELETE CASCADE,
-      session_id TEXT REFERENCES class_sessions(id) ON DELETE CASCADE,
-      reason TEXT NOT NULL,
-      documentation_url TEXT,
-      status TEXT CHECK(status IN ('pending', 'approved', 'rejected')) DEFAULT 'pending',
-      reviewed_by TEXT REFERENCES users(id) ON DELETE SET NULL,
-      review_notes TEXT,
-      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-      reviewed_at DATETIME
-    );
-
-    CREATE TABLE IF NOT EXISTS notification_logs (
-      id TEXT PRIMARY KEY,
-      recipient_id TEXT REFERENCES users(id) ON DELETE CASCADE,
-      recipient_name TEXT,
-      recipient_contact TEXT,
-      channel TEXT CHECK(channel IN ('email', 'sms', 'in_app')) DEFAULT 'email',
-      subject TEXT,
-      message TEXT NOT NULL,
-      status TEXT DEFAULT 'sent',
-      sent_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-      read_at DATETIME
-    );
-
-    -- Add read_at column if it doesn't exist yet (for existing databases)
-    CREATE INDEX IF NOT EXISTS idx_notif_recipient ON notification_logs(recipient_id);
-
+    -- Single-column indexes
     CREATE INDEX IF NOT EXISTS idx_attendance_session ON attendance_records(session_id);
     CREATE INDEX IF NOT EXISTS idx_attendance_student ON attendance_records(student_id);
     CREATE INDEX IF NOT EXISTS idx_sessions_section ON class_sessions(section_id);
     CREATE INDEX IF NOT EXISTS idx_enrollments_student ON enrollments(student_id);
     CREATE INDEX IF NOT EXISTS idx_enrollments_section ON enrollments(section_id);
 
-    -- Gamification Tables
-    CREATE TABLE IF NOT EXISTS student_xp (
+    -- Composite indexes for hot query paths
+    -- UNIQUE composite: covers the duplicate-scan check and the primary scan lookup
+    -- (session_id, student_id) WHERE clause in scanRoutes.js
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_attendance_session_student
+      ON attendance_records(session_id, student_id);
+
+    -- Covers analytics queries: WHERE section_id = ? AND status = 'closed'
+    CREATE INDEX IF NOT EXISTS idx_sessions_section_status
+      ON class_sessions(section_id, status);
+
+    -- ── S-Class: Active Presence (Pop Quizzes) ───────────────────────────────
+    CREATE TABLE IF NOT EXISTS session_prompts (
       id TEXT PRIMARY KEY,
-      student_id TEXT REFERENCES users(id) ON DELETE CASCADE,
-      section_id TEXT REFERENCES sections(id) ON DELETE CASCADE,
-      session_id TEXT REFERENCES class_sessions(id) ON DELETE CASCADE,
-      attendance_record_id TEXT,
-      xp_earned INTEGER NOT NULL DEFAULT 0,
-      reason TEXT,
-      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      session_id TEXT NOT NULL,
+      question_text TEXT NOT NULL,
+      options_json TEXT NOT NULL,
+      correct_option TEXT NOT NULL,
+      time_limit_seconds INTEGER DEFAULT 20,
+      status TEXT CHECK(status IN ('draft', 'active', 'completed')) DEFAULT 'draft',
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (session_id) REFERENCES class_sessions(id) ON DELETE CASCADE
     );
 
-    CREATE TABLE IF NOT EXISTS student_badges (
+    CREATE TABLE IF NOT EXISTS prompt_responses (
       id TEXT PRIMARY KEY,
-      student_id TEXT REFERENCES users(id) ON DELETE CASCADE,
-      badge_key TEXT NOT NULL,
-      badge_name TEXT NOT NULL,
-      badge_emoji TEXT DEFAULT '🏅',
-      badge_description TEXT,
-      earned_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-      UNIQUE(student_id, badge_key)
+      prompt_id TEXT NOT NULL,
+      student_id TEXT NOT NULL,
+      selected_option TEXT NOT NULL,
+      is_correct BOOLEAN NOT NULL,
+      points_awarded INTEGER DEFAULT 0,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (prompt_id) REFERENCES session_prompts(id) ON DELETE CASCADE,
+      FOREIGN KEY (student_id) REFERENCES users(id) ON DELETE CASCADE,
+      UNIQUE(prompt_id, student_id)
     );
 
-    CREATE INDEX IF NOT EXISTS idx_xp_student ON student_xp(student_id);
-    CREATE INDEX IF NOT EXISTS idx_badges_student ON student_badges(student_id);
-    CREATE INDEX IF NOT EXISTS idx_admin_audit_time ON admin_audit_logs(timestamp);
+    CREATE INDEX IF NOT EXISTS idx_session_prompts ON session_prompts(session_id);
+    CREATE INDEX IF NOT EXISTS idx_prompt_responses_student ON prompt_responses(student_id);
+
+    -- ── S-Class: Excuse Letter Workflow ──────────────────────────────────────
+    CREATE TABLE IF NOT EXISTS excuse_requests (
+      id TEXT PRIMARY KEY,
+      attendance_record_id TEXT NOT NULL UNIQUE,
+      student_id TEXT NOT NULL,
+      reason TEXT NOT NULL,
+      attachment_url TEXT NOT NULL,
+      status TEXT CHECK(status IN ('pending', 'approved', 'rejected')) DEFAULT 'pending',
+      reviewed_by TEXT,
+      reviewed_at DATETIME,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (attendance_record_id) REFERENCES attendance_records(id) ON DELETE CASCADE,
+      FOREIGN KEY (student_id) REFERENCES users(id) ON DELETE CASCADE,
+      FOREIGN KEY (reviewed_by) REFERENCES users(id) ON DELETE SET NULL
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_excuse_status ON excuse_requests(status);
+    CREATE INDEX IF NOT EXISTS idx_excuse_student ON excuse_requests(student_id);
   `);
   console.log('Database tables initialized successfully with foreign keys and WAL mode.');
-
-  // Safe migration: add read_at column to notification_logs if it doesn't exist
-  try {
-    db.exec('ALTER TABLE notification_logs ADD COLUMN read_at DATETIME;');
-  } catch (e) {
-    // Column already exists — ignore
-  }
-}
-
-export function logAdminAction(adminId, adminName, action, targetType, targetId, details) {
-  try {
-    const logId = crypto.randomUUID();
-    db.prepare(`
-      INSERT INTO admin_audit_logs (id, admin_id, admin_name, action, target_type, target_id, details)
-      VALUES (?, ?, ?, ?, ?, ?, ?)
-    `).run(logId, adminId || null, adminName || 'Admin', action, targetType, targetId || null, typeof details === 'object' ? JSON.stringify(details) : details || '');
-  } catch (err) {
-    console.error('Failed to write admin audit log:', err.message);
-  }
 }
 
 export default db;

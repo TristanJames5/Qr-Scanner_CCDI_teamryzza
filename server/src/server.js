@@ -2,14 +2,20 @@ import express from 'express';
 import http from 'http';
 import { Server } from 'socket.io';
 import cors from 'cors';
+import helmet from 'helmet';
+import rateLimit from 'express-rate-limit';
 import dotenv from 'dotenv';
 import path from 'path';
 import fs from 'fs';
 import { fileURLToPath } from 'url';
 
+import { validateEnv } from './config/validateEnv.js';
 import { initDatabase } from './config/db.js';
 import { seedDatabase } from './config/seed.js';
 import { initSocketIO } from './socket/socketHandler.js';
+import { requestIdMiddleware } from './middleware/requestId.js';
+import { initCronJobs } from './services/cronJobs.js';
+import db from './config/db.js';
 
 import authRoutes from './routes/authRoutes.js';
 import sessionRoutes from './routes/sessionRoutes.js';
@@ -17,10 +23,13 @@ import scanRoutes from './routes/scanRoutes.js';
 import sectionRoutes from './routes/sectionRoutes.js';
 import analyticsRoutes from './routes/analyticsRoutes.js';
 import adminRoutes from './routes/adminRoutes.js';
-import instructorRoutes from './routes/instructorRoutes.js';
-import gamificationRoutes from './routes/gamificationRoutes.js';
+import excuseRoutes from './routes/excuseRoutes.js';
+import promptRoutes from './routes/promptRoutes.js';
 
 dotenv.config();
+
+// Fail-fast: crash immediately if required secrets are missing in production
+validateEnv();
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -30,40 +39,84 @@ const server = http.createServer(app);
 
 const PORT = process.env.PORT || 5000;
 const CLIENT_URL = process.env.CLIENT_URL || 'http://localhost:5173';
+const allowedOrigins = CLIENT_URL.split(',').map(o => o.trim());
 
-// Initialize Socket.io with permissive CORS for local dev
+// Initialize Socket.io with strict CORS
 const io = new Server(server, {
   cors: {
-    origin: '*',
-    methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH']
+    origin: allowedOrigins,
+    methods: ['GET', 'POST']
   }
 });
 initSocketIO(io);
 
-// Middleware
+// ── Middleware ──────────────────────────────────────────────────────────────
+
+// 1. Correlation IDs — trace every request across logs
+app.use(requestIdMiddleware);
+
+// 2. Security headers — OWASP A05, Clickjacking, MIME sniffing, XSS
+// contentSecurityPolicy disabled to allow React SPA served from same origin
+app.use(helmet({ contentSecurityPolicy: false }));
+
+// 3. Strict CORS — whitelist from CLIENT_URL env var, never wildcard
 app.use(cors({
-  origin: '*',
+  origin: (origin, callback) => {
+    // Allow server-to-server or same-origin requests (no origin header)
+    if (!origin || allowedOrigins.includes(origin)) return callback(null, true);
+    callback(new Error(`CORS blocked: ${origin}`));
+  },
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH'],
-  allowedHeaders: ['Content-Type', 'Authorization']
+  allowedHeaders: ['Content-Type', 'Authorization'],
+  credentials: true,
 }));
+
+// 4. Rate limiters — OWASP A07: Identification & Authentication Failures
+const authLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15-minute window
+  max: 20,                   // 20 login attempts per IP
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Too many login attempts. Please wait 15 minutes and try again.' },
+});
+app.use('/api/auth/login', authLimiter);
+
+const scanLimiter = rateLimit({
+  windowMs: 60 * 1000, // 1-minute window
+  max: 10,              // 10 scan attempts per IP per minute (anti replay-flood)
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Scan rate limit exceeded. Please wait before retrying.' },
+});
+app.use('/api/scan', scanLimiter);
+
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true }));
-
-// Request logger
-app.use((req, res, next) => {
-  if (req.path.startsWith('/api')) {
-    // console.log(`[${new Date().toISOString().slice(11, 19)}] ${req.method} ${req.path}`);
-  }
-  next();
-});
 
 // Initialize database & auto-seed if empty
 initDatabase();
 seedDatabase();
 
-// Health check
+// S-Class: Start background cron jobs (Early Warning System, etc.)
+initCronJobs();
+
+// ── Health / Readiness Probe ────────────────────────────────────────────────
+// Real DB ping — not a stub. Load balancers and Render use this to decide
+// whether your container is healthy and ready to serve traffic.
 app.get('/api/health', (req, res) => {
-  res.json({ status: 'ok', timestamp: new Date().toISOString(), system: 'CCDI QRScan Backend API' });
+  try {
+    const row = db.prepare('SELECT 1 AS ok').get();
+    res.json({
+      status: 'ok',
+      db: row?.ok === 1 ? 'connected' : 'degraded',
+      uptime: Math.floor(process.uptime()),
+      timestamp: new Date().toISOString(),
+      version: process.env.npm_package_version || '1.0.0',
+    });
+  } catch (err) {
+    console.error(JSON.stringify({ level: 'error', event: 'health_check_failed', message: err.message }));
+    res.status(503).json({ status: 'error', db: 'disconnected' });
+  }
 });
 
 // API Routes
@@ -73,8 +126,8 @@ app.use('/api/scan', scanRoutes);
 app.use('/api/sections', sectionRoutes);
 app.use('/api/analytics', analyticsRoutes);
 app.use('/api/admin', adminRoutes);
-app.use('/api/instructor', instructorRoutes);
-app.use('/api/gamification', gamificationRoutes);
+app.use('/api/excuses', excuseRoutes);
+app.use('/api/prompts', promptRoutes);
 
 // Serve Frontend Production Build (if dist folder exists)
 const clientDistPath = path.resolve(__dirname, '../../client/dist');
@@ -87,10 +140,28 @@ if (fs.existsSync(clientDistPath)) {
   });
 }
 
-// Global error handler
+// ── Global Error Handler ───────────────────────────────────────────────────
+// Catches any error thrown by route handlers via next(err).
+// SECURITY: Never expose err.message to clients in production (OWASP A05).
 app.use((err, req, res, next) => {
-  console.error('Unhandled server error:', err);
-  res.status(500).json({ error: 'Internal server error: ' + (err.message || 'Unknown error') });
+  const requestId = req.requestId || 'unknown';
+  const isProd = process.env.NODE_ENV === 'production';
+
+  // Structured JSON log — grep by requestId to trace the full request chain
+  console.error(JSON.stringify({
+    level: 'error',
+    requestId,
+    message: err.message,
+    stack: isProd ? undefined : err.stack,
+    path: req.path,
+    method: req.method,
+    timestamp: new Date().toISOString(),
+  }));
+
+  res.status(err.status || 500).json({
+    error: isProd ? 'Internal server error' : err.message,
+    requestId,
+  });
 });
 
 // Start listening if not in Vercel serverless environment

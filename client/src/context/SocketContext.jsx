@@ -1,5 +1,6 @@
-import React, { createContext, useContext, useEffect, useState } from 'react';
+import React, { createContext, useContext, useEffect, useState, useCallback } from 'react';
 import { io } from 'socket.io-client';
+import api from '../api/axios';
 
 const SocketContext = createContext(null);
 
@@ -21,9 +22,40 @@ export const SocketProvider = ({ children }) => {
     };
   }, []);
 
-  const joinSession = (sessionId) => {
+  const [activePrompt, setActivePrompt] = useState(null);
+  const [promptReveal, setPromptReveal] = useState(null);
+
+  useEffect(() => {
+    if (!socket) return;
+    
+    socket.on('prompt:start', (prompt) => {
+      setActivePrompt(prompt);
+      setPromptReveal(null);
+    });
+
+    socket.on('prompt:reveal', (reveal) => {
+      setPromptReveal(reveal);
+    });
+
+    return () => {
+      socket.off('prompt:start');
+      socket.off('prompt:reveal');
+    }
+  }, [socket]);
+
+  const joinSession = async (sessionId) => {
     if (socket && sessionId) {
       socket.emit('join_session', sessionId);
+      
+      // Fetch active prompt if we reconnected or joined late
+      try {
+        const res = await api.get(`/prompts/session/${sessionId}/active`);
+        if (res.data?.prompt) {
+          setActivePrompt(res.data.prompt);
+        }
+      } catch (err) {
+        console.error('Failed to sync active prompt state:', err);
+      }
     }
   };
 
@@ -34,7 +66,15 @@ export const SocketProvider = ({ children }) => {
   };
 
   return (
-    <SocketContext.Provider value={{ socket, joinSession, leaveSession }}>
+    <SocketContext.Provider value={{ 
+      socket, 
+      joinSession, 
+      leaveSession,
+      activePrompt,
+      setActivePrompt,
+      promptReveal,
+      setPromptReveal
+    }}>
       {children}
     </SocketContext.Provider>
   );
