@@ -2,6 +2,7 @@ import { DatabaseSync } from 'node:sqlite';
 import path from 'path';
 import fs from 'fs';
 import { fileURLToPath } from 'url';
+import { v4 as uuidv4 } from 'uuid';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -164,8 +165,68 @@ export function initDatabase() {
 
     CREATE INDEX IF NOT EXISTS idx_excuse_status ON excuse_requests(status);
     CREATE INDEX IF NOT EXISTS idx_excuse_student ON excuse_requests(student_id);
+
+    CREATE TABLE IF NOT EXISTS admin_audit_logs (
+      id TEXT PRIMARY KEY,
+      admin_id TEXT NOT NULL,
+      admin_name TEXT NOT NULL,
+      action TEXT NOT NULL,
+      target_type TEXT NOT NULL,
+      target_id TEXT,
+      details TEXT,
+      timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
+    );
+    CREATE INDEX IF NOT EXISTS idx_audit_logs_timestamp ON admin_audit_logs(timestamp);
+
+    CREATE TABLE IF NOT EXISTS announcements (
+      id TEXT PRIMARY KEY,
+      author_id TEXT REFERENCES users(id) ON DELETE SET NULL,
+      author_name TEXT NOT NULL,
+      title TEXT NOT NULL,
+      content TEXT NOT NULL,
+      target_audience TEXT DEFAULT 'all',
+      priority TEXT DEFAULT 'normal',
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    );
+
+    CREATE TABLE IF NOT EXISTS absence_excuse_requests (
+      id TEXT PRIMARY KEY,
+      student_id TEXT REFERENCES users(id) ON DELETE CASCADE,
+      session_id TEXT REFERENCES class_sessions(id) ON DELETE CASCADE,
+      reason TEXT NOT NULL,
+      documentation_url TEXT,
+      status TEXT CHECK(status IN ('pending', 'approved', 'rejected')) DEFAULT 'pending',
+      reviewed_by TEXT REFERENCES users(id) ON DELETE SET NULL,
+      review_notes TEXT,
+      reviewed_at DATETIME,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    );
+    CREATE INDEX IF NOT EXISTS idx_excuse_requests_status ON absence_excuse_requests(status);
+
+    CREATE TABLE IF NOT EXISTS notification_logs (
+      id TEXT PRIMARY KEY,
+      recipient_id TEXT REFERENCES users(id) ON DELETE SET NULL,
+      recipient_name TEXT,
+      recipient_contact TEXT,
+      channel TEXT DEFAULT 'email',
+      subject TEXT,
+      message TEXT NOT NULL,
+      status TEXT DEFAULT 'sent',
+      sent_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    );
   `);
   console.log('Database tables initialized successfully with foreign keys and WAL mode.');
+}
+
+export function logAdminAction(adminId, adminName, action, targetType, targetId, details = {}) {
+  try {
+    db.prepare(`
+      INSERT INTO admin_audit_logs (id, admin_id, admin_name, action, target_type, target_id, details)
+      VALUES (?, ?, ?, ?, ?, ?, ?)
+    `).run(uuidv4(), adminId, adminName, action, targetType, targetId, JSON.stringify(details));
+  } catch (err) {
+    console.error('Failed to log admin action:', err.message);
+  }
 }
 
 export default db;
