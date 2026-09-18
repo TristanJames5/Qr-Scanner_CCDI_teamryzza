@@ -219,6 +219,32 @@ export function initDatabase() {
       sent_at DATETIME DEFAULT CURRENT_TIMESTAMP,
       read_at DATETIME
     );
+
+    -- ── Gamification Tables ───────────────────────────────────────────────────
+    CREATE TABLE IF NOT EXISTS student_xp (
+      id TEXT PRIMARY KEY,
+      student_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      section_id TEXT REFERENCES sections(id) ON DELETE SET NULL,
+      session_id TEXT REFERENCES class_sessions(id) ON DELETE SET NULL,
+      attendance_record_id TEXT,
+      xp_earned INTEGER NOT NULL,
+      reason TEXT NOT NULL,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    );
+    CREATE INDEX IF NOT EXISTS idx_student_xp_student ON student_xp(student_id);
+    CREATE INDEX IF NOT EXISTS idx_student_xp_session ON student_xp(session_id);
+
+    CREATE TABLE IF NOT EXISTS student_badges (
+      id TEXT PRIMARY KEY,
+      student_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      badge_key TEXT NOT NULL,
+      badge_name TEXT NOT NULL,
+      badge_emoji TEXT,
+      badge_description TEXT,
+      earned_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      UNIQUE(student_id, badge_key)
+    );
+    CREATE INDEX IF NOT EXISTS idx_student_badges_student ON student_badges(student_id);
   `);
   
   // Safe Migrations for existing DBs
@@ -227,7 +253,11 @@ export function initDatabase() {
   try { db.exec("ALTER TABLE session_prompts ADD COLUMN image_url TEXT;"); } catch (e) {}
   try { db.exec("ALTER TABLE session_prompts ADD COLUMN end_time INTEGER;"); } catch (e) {}
   try { db.exec("ALTER TABLE notification_logs ADD COLUMN read_at DATETIME;"); } catch (e) {}
-
+  // Gamification tables migration (in case DB already exists without them)
+  try { db.exec(`CREATE TABLE IF NOT EXISTS student_xp (id TEXT PRIMARY KEY, student_id TEXT NOT NULL, section_id TEXT, session_id TEXT, attendance_record_id TEXT, xp_earned INTEGER NOT NULL, reason TEXT NOT NULL, created_at DATETIME DEFAULT CURRENT_TIMESTAMP);`); } catch (e) {}
+  try { db.exec(`CREATE INDEX IF NOT EXISTS idx_student_xp_student ON student_xp(student_id);`); } catch (e) {}
+  try { db.exec(`CREATE TABLE IF NOT EXISTS student_badges (id TEXT PRIMARY KEY, student_id TEXT NOT NULL, badge_key TEXT NOT NULL, badge_name TEXT NOT NULL, badge_emoji TEXT, badge_description TEXT, earned_at DATETIME DEFAULT CURRENT_TIMESTAMP, UNIQUE(student_id, badge_key));`); } catch (e) {}
+  try { db.exec(`CREATE INDEX IF NOT EXISTS idx_student_badges_student ON student_badges(student_id);`); } catch (e) {}
   console.log('Database tables initialized successfully with foreign keys and WAL mode.');
 }
 

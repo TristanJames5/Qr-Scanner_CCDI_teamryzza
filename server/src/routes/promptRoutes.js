@@ -17,7 +17,6 @@ router.get('/session/:sessionId/active', authenticate, (req, res) => {
 
     if (!prompt) return res.json({ prompt: null });
 
-    // Hide correct option from students, expose end_time so timer works
     const response = {
       ...prompt,
       options: JSON.parse(prompt.options_json),
@@ -32,13 +31,12 @@ router.get('/session/:sessionId/active', authenticate, (req, res) => {
   }
 });
 
-// Create and Launch a prompt (Instructor only)
+// Launch a prompt - also accepts is_last flag to know if leaderboard should follow
 router.post('/session/:sessionId/launch', authenticate, authorize('instructor'), (req, res) => {
   try {
     const { sessionId } = req.params;
-    const { question_text, options, correct_option, time_limit_seconds, image_url, group_id } = req.body;
+    const { question_text, options, correct_option, time_limit_seconds, image_url, group_id, is_last } = req.body;
 
-    // Verify session belongs to instructor and is active
     const session = db.prepare('SELECT id FROM class_sessions WHERE id = ? AND instructor_id = ? AND status = ?').get(sessionId, req.user.id, 'active');
     if (!session) {
       return res.status(403).json({ error: 'Invalid or inactive session.' });
@@ -54,7 +52,6 @@ router.post('/session/:sessionId/launch', authenticate, authorize('instructor'),
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'active', ?)
     `).run(promptId, sessionId, group_id || null, question_text, image_url || null, optionsJson, correct_option, timeLimitSec, endTime);
 
-    // Broadcast to all in session room (students + instructor)
     broadcastSessionEvent(sessionId, 'prompt:start', {
       id: promptId,
       group_id: group_id || null,
@@ -62,14 +59,15 @@ router.post('/session/:sessionId/launch', authenticate, authorize('instructor'),
       image_url: image_url || null,
       options,
       time_limit_seconds: timeLimitSec,
-      end_time: endTime
+      end_time: endTime,
+      is_last: !!is_last
     });
 
     // Auto-close after time limit + 1s buffer
     setTimeout(() => {
       const current = db.prepare("SELECT status FROM session_prompts WHERE id = ?").get(promptId);
       if (current && current.status === 'active') {
-        closePrompt(promptId, sessionId);
+        closePrompt(promptId, sessionId, !!is_last);
       }
     }, (timeLimitSec * 1000) + 1000);
 
@@ -80,17 +78,18 @@ router.post('/session/:sessionId/launch', authenticate, authorize('instructor'),
   }
 });
 
-// Instructor manually ends a prompt early
+// Instructor manually ends prompt early
 router.post('/session/:sessionId/prompt/:promptId/close', authenticate, authorize('instructor'), (req, res) => {
   try {
     const { sessionId, promptId } = req.params;
+    const { is_last } = req.body;
 
     const session = db.prepare('SELECT id FROM class_sessions WHERE id = ? AND instructor_id = ?').get(sessionId, req.user.id);
     if (!session) return res.status(403).json({ error: 'Unauthorized' });
 
     const prompt = db.prepare('SELECT status FROM session_prompts WHERE id = ?').get(promptId);
     if (prompt && prompt.status === 'active') {
-      closePrompt(promptId, sessionId);
+      closePrompt(promptId, sessionId, !!is_last);
     }
     res.json({ success: true });
   } catch (error) {
@@ -99,12 +98,12 @@ router.post('/session/:sessionId/prompt/:promptId/close', authenticate, authoriz
   }
 });
 
-// Close prompt: reveal answer, award XP, emit reveal, then check if it was last in group
-function closePrompt(promptId, sessionId) {
+// Internal: close a prompt, reveal answer, optionally fire leaderboard
+function closePrompt(promptId, sessionId, isLast = false) {
   try {
     db.prepare("UPDATE session_prompts SET status = 'completed' WHERE id = ?").run(promptId);
 
-    // Tally votes per option
+    // Tally votes
     const statsRow = db.prepare(`
       SELECT selected_option, COUNT(*) as count 
       FROM prompt_responses 
@@ -117,58 +116,49 @@ function closePrompt(promptId, sessionId) {
 
     const prompt = db.prepare('SELECT * FROM session_prompts WHERE id = ?').get(promptId);
 
-    // Broadcast answer reveal to ALL clients in room (students see correct answer)
+    // Reveal the correct answer to everyone
     broadcastSessionEvent(sessionId, 'prompt:reveal', {
       promptId,
       correctOption: prompt.correct_option,
       stats
     });
 
-    // After reveal, check if there are more active/pending prompts in the same group
-    // If this was the last, broadcast leaderboard
-    const remainingInGroup = prompt.group_id
-      ? db.prepare("SELECT COUNT(*) as count FROM session_prompts WHERE group_id = ? AND status = 'active'").get(prompt.group_id).count
-      : 0;
-
-    if (remainingInGroup === 0) {
-      // Compute leaderboard: top participants by total points in this session's prompts
-      const sessionGroupIds = db.prepare(`
-        SELECT DISTINCT group_id FROM session_prompts 
-        WHERE session_id = ? AND group_id IS NOT NULL
-      `).all(sessionId).map(r => r.group_id);
-
-      let leaderboard = [];
-      if (sessionGroupIds.length > 0) {
-        // Get all prompts for those groups
-        const promptIds = db.prepare(`
-          SELECT id FROM session_prompts WHERE session_id = ?
-        `).all(sessionId).map(r => r.id);
-
-        if (promptIds.length > 0) {
-          // Build parameterized IN list safely
-          const placeholders = promptIds.map(() => '?').join(',');
-          leaderboard = db.prepare(`
-            SELECT u.id, u.name, u.avatar_url, u.id_number,
-                   SUM(pr.points_awarded) as total_points,
-                   COUNT(CASE WHEN pr.is_correct = 1 THEN 1 END) as correct_count,
-                   COUNT(pr.id) as answered_count
-            FROM prompt_responses pr
-            JOIN users u ON pr.student_id = u.id
-            WHERE pr.prompt_id IN (${placeholders})
-            GROUP BY u.id
-            ORDER BY total_points DESC
-            LIMIT 10
-          `).all(...promptIds);
-        }
-      }
-
-      // Delay leaderboard so students see the final reveal for 8s first
+    // Only fire leaderboard if this is explicitly the last question
+    if (isLast) {
       setTimeout(() => {
+        const leaderboard = buildLeaderboard(sessionId);
         broadcastSessionEvent(sessionId, 'prompt:leaderboard', { leaderboard });
-      }, 8000);
+      }, 8000); // 8s so students can see the final answer reveal
     }
   } catch (e) {
-    console.error("Error closing prompt", e);
+    console.error("Error closing prompt:", e);
+  }
+}
+
+// Build top-10 leaderboard for the session
+function buildLeaderboard(sessionId) {
+  try {
+    const promptIds = db.prepare(`SELECT id FROM session_prompts WHERE session_id = ?`)
+      .all(sessionId).map(r => r.id);
+
+    if (promptIds.length === 0) return [];
+
+    const placeholders = promptIds.map(() => '?').join(',');
+    return db.prepare(`
+      SELECT u.id, u.name, u.avatar_url, u.id_number,
+             COALESCE(SUM(pr.points_awarded), 0) as total_points,
+             COUNT(CASE WHEN pr.is_correct = 1 THEN 1 END) as correct_count,
+             COUNT(pr.id) as answered_count
+      FROM prompt_responses pr
+      JOIN users u ON pr.student_id = u.id
+      WHERE pr.prompt_id IN (${placeholders})
+      GROUP BY u.id
+      ORDER BY total_points DESC, correct_count DESC
+      LIMIT 10
+    `).all(...promptIds);
+  } catch (e) {
+    console.error("Error building leaderboard:", e);
+    return [];
   }
 }
 
@@ -179,7 +169,6 @@ router.post('/:promptId/submit', authenticate, (req, res) => {
     const { selectedOption } = req.body;
     const studentId = req.user.id;
 
-    // BLOCK: instructors cannot answer
     if (req.user.role === 'instructor' || req.user.role === 'admin') {
       return res.status(403).json({ error: 'Instructors cannot participate in Quick Recap.' });
     }
@@ -195,7 +184,7 @@ router.post('/:promptId/submit', authenticate, (req, res) => {
       const maxTime = prompt.time_limit_seconds * 1000;
       const startTime = prompt.end_time - maxTime;
       const timeTaken = Math.max(0, Math.min(Date.now() - startTime, maxTime));
-      // Kahoot-style: min 50 pts for correct, bonus up to 50 for speed
+      // Kahoot-style scoring: 50 base + up to 50 speed bonus
       points = 50 + Math.round(50 * (1 - timeTaken / maxTime));
     }
 
@@ -215,7 +204,6 @@ router.post('/:promptId/submit', authenticate, (req, res) => {
       throw e;
     }
 
-    // Update instructor progress counter
     const totalPresent = db.prepare(`
       SELECT COUNT(*) as count FROM attendance_records 
       WHERE session_id = ? AND status IN ('present', 'late')

@@ -31,8 +31,7 @@ import {
 export const LiveSessionView = () => {
   const { id: sessionId } = useParams();
   const navigate = useNavigate();
-  const { socket, joinSession, leaveSession } = useSocket();
-  const { promptLeaderboard } = useSocket();
+  const { socket, joinSession, leaveSession, promptLeaderboard } = useSocket();
 
   const [sessionData, setSessionData] = useState(null);
   const [tokenData, setTokenData] = useState(null);
@@ -382,17 +381,25 @@ export const LiveSessionView = () => {
 
     const firstQ = promptDeck[0];
     const groupId = Math.random().toString(36).substring(7);
+    const isLast = promptDeck.length === 1;
 
     try {
-      const res = await api.post(`/prompts/session/${sessionId}/launch`, { ...firstQ, group_id: groupId });
+      const res = await api.post(`/prompts/session/${sessionId}/launch`, { 
+        ...firstQ, 
+        group_id: groupId,
+        is_last: isLast
+      });
       setActivePrompt({
         ...firstQ,
         id: res.data.promptId,
-        end_time: Date.now() + (firstQ.time_limit_seconds * 1000)
+        end_time: Date.now() + (firstQ.time_limit_seconds * 1000),
+        is_last: isLast
       });
-      setPromptStats({ answeredCount: 0, totalPresent: sessionData.stats?.present + sessionData.stats?.late || 0 });
+      setPromptStats({ answeredCount: 0, totalPresent: (sessionData.stats?.present || 0) + (sessionData.stats?.late || 0) });
       setActiveDeckQueue(promptDeck.slice(1).map(q => ({ ...q, group_id: groupId })));
       setShowPromptModal(false);
+      // Reset prompt deck for next time
+      setPromptDeck([defaultQuestion()]);
     } catch (err) {
       console.error('Failed to launch prompt', err);
       alert('Failed to launch recap quiz.');
@@ -423,25 +430,29 @@ export const LiveSessionView = () => {
     }
 
     const nextQ = activeDeckQueue[0];
+    const isLast = activeDeckQueue.length === 1; // this next question is the final one
     try {
-      const res = await api.post(`/prompts/session/${sessionId}/launch`, nextQ);
+      const res = await api.post(`/prompts/session/${sessionId}/launch`, { ...nextQ, is_last: isLast });
       setActivePrompt({
         ...nextQ,
         id: res.data.promptId,
-        end_time: Date.now() + (nextQ.time_limit_seconds * 1000)
+        end_time: Date.now() + (nextQ.time_limit_seconds * 1000),
+        is_last: isLast
       });
-      setPromptStats({ answeredCount: 0, totalPresent: sessionData.stats?.present + sessionData.stats?.late || 0 });
+      setPromptStats({ answeredCount: 0, totalPresent: (sessionData.stats?.present || 0) + (sessionData.stats?.late || 0) });
       setActiveDeckQueue(prev => prev.slice(1));
     } catch (err) {
       console.error('Failed to launch prompt', err);
-      alert('Failed to launch recap quiz.');
+      alert('Failed to launch next question.');
     }
   };
 
   const handleEndPromptEarly = async () => {
     if (!activePrompt) return;
     try {
-      await api.post(`/prompts/session/${sessionId}/prompt/${activePrompt.id}/close`);
+      await api.post(`/prompts/session/${sessionId}/prompt/${activePrompt.id}/close`, {
+        is_last: activePrompt.is_last || activeDeckQueue.length === 0
+      });
     } catch (err) {
       console.error('Failed to end prompt early', err);
       alert('Failed to end prompt early.');
