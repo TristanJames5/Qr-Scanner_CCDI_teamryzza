@@ -77,10 +77,25 @@ router.post('/', authenticate, async (req, res) => {
     `).get(targetSessionId, student.id);
 
     if (existingRecord) {
-      return res.status(409).json({
-        error: `You have already scanned for this session (${existingRecord.status.toUpperCase()}) at ${new Date(existingRecord.scanned_at).toLocaleTimeString()}.`,
-        alreadyRecorded: true,
-        record: existingRecord
+      return res.status(200).json({
+        success: true,
+        message: `Attendance already recorded as ${existingRecord.status.toUpperCase()}!`,
+        status: existingRecord.status,
+        scannedAt: existingRecord.scanned_at,
+        isEarly: false,
+        gamification: null,
+        session: {
+          id: targetSessionId,
+          subjectCode: session.subject_code,
+          subjectTitle: session.subject_title,
+          sectionName: session.section_name,
+          room: session.room,
+          instructorName: session.instructor_name
+        },
+        student: {
+          idNumber: student.id_number,
+          name: student.name
+        }
       });
     }
 

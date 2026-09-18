@@ -162,10 +162,10 @@ function closePrompt(promptId, sessionId) {
         }
       }
 
-      // Delay leaderboard so students see the final reveal for 3s first
+      // Delay leaderboard so students see the final reveal for 8s first
       setTimeout(() => {
         broadcastSessionEvent(sessionId, 'prompt:leaderboard', { leaderboard });
-      }, 3500);
+      }, 8000);
     }
   } catch (e) {
     console.error("Error closing prompt", e);
