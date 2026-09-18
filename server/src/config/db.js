@@ -130,6 +130,7 @@ export function initDatabase() {
       correct_option TEXT NOT NULL,
       time_limit_seconds INTEGER DEFAULT 20,
       status TEXT CHECK(status IN ('draft', 'active', 'completed')) DEFAULT 'draft',
+      end_time INTEGER,
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
       FOREIGN KEY (session_id) REFERENCES class_sessions(id) ON DELETE CASCADE
     );
@@ -223,6 +224,7 @@ export function initDatabase() {
   try { db.exec("ALTER TABLE users ADD COLUMN total_xp INTEGER DEFAULT 0;"); } catch (e) {}
   try { db.exec("ALTER TABLE session_prompts ADD COLUMN group_id TEXT;"); } catch (e) {}
   try { db.exec("ALTER TABLE session_prompts ADD COLUMN image_url TEXT;"); } catch (e) {}
+  try { db.exec("ALTER TABLE session_prompts ADD COLUMN end_time INTEGER;"); } catch (e) {}
 
   console.log('Database tables initialized successfully with foreign keys and WAL mode.');
 }

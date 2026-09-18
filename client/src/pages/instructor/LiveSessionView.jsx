@@ -410,6 +410,16 @@ export const LiveSessionView = () => {
     }
   };
 
+  const handleEndPromptEarly = async () => {
+    if (!activePrompt) return;
+    try {
+      await api.post(`/prompts/session/${sessionId}/prompt/${activePrompt.id}/close`);
+    } catch (err) {
+      console.error('Failed to end prompt early', err);
+      alert('Failed to end prompt early.');
+    }
+  };
+
   const handleImageUpload = (e, index) => {
     const file = e.target.files[0];
     if (!file) return;
@@ -614,11 +624,16 @@ export const LiveSessionView = () => {
               </div>
               
               {!promptStats?.correctOption && (
-                <div className="flex items-center gap-3 px-6 py-3 bg-slate-900 rounded-full border border-slate-800">
-                  <Users className="w-5 h-5 text-blue-400" />
-                  <span className="font-semibold text-slate-300">
-                    <span className="text-white text-lg">{promptStats?.answeredCount || 0}</span> / {promptStats?.totalPresent || 0} Answered
-                  </span>
+                <div className="flex flex-col items-center gap-4 mt-4 w-full px-6">
+                  <div className="flex items-center gap-3 px-6 py-3 bg-slate-900 rounded-full border border-slate-800">
+                    <Users className="w-5 h-5 text-blue-400" />
+                    <span className="font-semibold text-slate-300">
+                      <span className="text-white text-lg">{promptStats?.answeredCount || 0}</span> / {promptStats?.totalPresent || 0} Answered
+                    </span>
+                  </div>
+                  <button onClick={handleEndPromptEarly} className="py-2 px-6 bg-rose-600 hover:bg-rose-500 rounded-xl text-white text-sm font-bold transition-colors shadow-lg shadow-rose-900/40">
+                    End Question Early
+                  </button>
                 </div>
               )}
             </div>

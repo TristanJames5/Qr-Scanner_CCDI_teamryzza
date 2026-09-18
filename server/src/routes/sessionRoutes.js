@@ -281,22 +281,17 @@ router.post('/:id/close', authenticate, authorize('instructor', 'admin'), (req, 
     `);
 
     const checkExcuse = db.prepare(`
-      SELECT id FROM excuse_letters 
-      WHERE student_id = ? AND section_id = ? AND target_date = ? AND status = 'approved'
-    `);
-
-    const updateExcuse = db.prepare(`
-      UPDATE excuse_letters SET attendance_record_id = ? WHERE id = ?
+      SELECT id FROM absence_excuse_requests 
+      WHERE student_id = ? AND session_id = ? AND status = 'approved'
     `);
 
     unscannedStudents.forEach(stu => {
       const recordId = uuidv4();
-      // Check if student has an approved advance excuse for this session date
-      const excuse = checkExcuse.get(stu.id, session.section_id, session.date);
+      // Check if student has an approved advance excuse for this session
+      const excuse = checkExcuse.get(stu.id, id);
       
       if (excuse) {
         insertExcused.run(recordId, id, stu.id, nowIso);
-        updateExcuse.run(recordId, excuse.id);
       } else {
         insertAbsent.run(recordId, id, stu.id, nowIso);
       }

@@ -43,10 +43,12 @@ router.post('/session/:sessionId/launch', authenticate, authorize('instructor'),
     const promptId = uuidv4();
     const optionsJson = JSON.stringify(options); // [{id: 'A', text: '...'}, ...]
 
+    const endTime = Date.now() + ((time_limit_seconds || 20) * 1000);
+
     db.prepare(`
-      INSERT INTO session_prompts (id, session_id, group_id, question_text, image_url, options_json, correct_option, time_limit_seconds, status)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'active')
-    `).run(promptId, sessionId, group_id || null, question_text, image_url || null, optionsJson, correct_option, time_limit_seconds || 20);
+      INSERT INTO session_prompts (id, session_id, group_id, question_text, image_url, options_json, correct_option, time_limit_seconds, status, end_time)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'active', ?)
+    `).run(promptId, sessionId, group_id || null, question_text, image_url || null, optionsJson, correct_option, time_limit_seconds || 20, endTime);
 
     const prompt = {
         id: promptId,
@@ -55,7 +57,7 @@ router.post('/session/:sessionId/launch', authenticate, authorize('instructor'),
         image_url: image_url || null,
         options,
         time_limit_seconds: time_limit_seconds || 20,
-        end_time: Date.now() + ((time_limit_seconds || 20) * 1000)
+        end_time: endTime
     };
 
     // Broadcast to session room
@@ -71,6 +73,26 @@ router.post('/session/:sessionId/launch', authenticate, authorize('instructor'),
     console.error(error);
     res.status(500).json({ error: 'Failed to launch prompt' });
   }
+});
+
+// Instructor manually ends a prompt early
+router.post('/session/:sessionId/prompt/:promptId/close', authenticate, authorize('instructor'), (req, res) => {
+    try {
+        const { sessionId, promptId } = req.params;
+        
+        // Verify ownership
+        const session = db.prepare('SELECT id FROM class_sessions WHERE id = ? AND instructor_id = ?').get(sessionId, req.user.id);
+        if (!session) return res.status(403).json({ error: 'Unauthorized' });
+
+        const prompt = db.prepare('SELECT status FROM session_prompts WHERE id = ?').get(promptId);
+        if (prompt && prompt.status === 'active') {
+            closePrompt(promptId, sessionId);
+        }
+        res.json({ success: true });
+    } catch (error) {
+        console.error(error);
+        res.status(500).json({ error: 'Failed to close prompt early' });
+    }
 });
 
 // Close prompt manually or via timeout
