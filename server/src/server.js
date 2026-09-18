@@ -44,7 +44,13 @@ const allowedOrigins = CLIENT_URL.split(',').map(o => o.trim());
 // Initialize Socket.io with strict CORS
 const io = new Server(server, {
   cors: {
-    origin: allowedOrigins,
+    origin: (origin, callback) => {
+      if (!origin) return callback(null, true);
+      if (allowedOrigins.includes(origin)) return callback(null, true);
+      if (process.env.RENDER_EXTERNAL_URL && origin === process.env.RENDER_EXTERNAL_URL) return callback(null, true);
+      if (origin.endsWith('.onrender.com')) return callback(null, true);
+      callback(new Error(`Socket CORS blocked: ${origin}`));
+    },
     methods: ['GET', 'POST']
   }
 });
@@ -59,11 +65,19 @@ app.use(requestIdMiddleware);
 // contentSecurityPolicy disabled to allow React SPA served from same origin
 app.use(helmet({ contentSecurityPolicy: false }));
 
-// 3. Strict CORS — whitelist from CLIENT_URL env var, never wildcard
+// 3. Strict CORS — whitelist from CLIENT_URL env var, plus dynamic Render URLs
 app.use(cors({
   origin: (origin, callback) => {
-    // Allow server-to-server or same-origin requests (no origin header)
-    if (!origin || allowedOrigins.includes(origin)) return callback(null, true);
+    // Allow server-to-server requests (no origin header)
+    if (!origin) return callback(null, true);
+    
+    // Allow explicitly whitelisted origins
+    if (allowedOrigins.includes(origin)) return callback(null, true);
+    
+    // Dynamically allow the Render deployment URL if running on Render
+    if (process.env.RENDER_EXTERNAL_URL && origin === process.env.RENDER_EXTERNAL_URL) return callback(null, true);
+    if (origin.endsWith('.onrender.com')) return callback(null, true);
+
     callback(new Error(`CORS blocked: ${origin}`));
   },
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH'],
