@@ -239,8 +239,10 @@ export function initDatabase() {
       student_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
       badge_key TEXT NOT NULL,
       badge_name TEXT NOT NULL,
-      badge_emoji TEXT,
       badge_description TEXT,
+      badge_xp INTEGER DEFAULT 0,
+      badge_tier INTEGER DEFAULT 1,
+      badge_emoji TEXT,
       earned_at DATETIME DEFAULT CURRENT_TIMESTAMP,
       UNIQUE(student_id, badge_key)
     );
@@ -256,8 +258,12 @@ export function initDatabase() {
   // Gamification tables migration (in case DB already exists without them)
   try { db.exec(`CREATE TABLE IF NOT EXISTS student_xp (id TEXT PRIMARY KEY, student_id TEXT NOT NULL, section_id TEXT, session_id TEXT, attendance_record_id TEXT, xp_earned INTEGER NOT NULL, reason TEXT NOT NULL, created_at DATETIME DEFAULT CURRENT_TIMESTAMP);`); } catch (e) {}
   try { db.exec(`CREATE INDEX IF NOT EXISTS idx_student_xp_student ON student_xp(student_id);`); } catch (e) {}
-  try { db.exec(`CREATE TABLE IF NOT EXISTS student_badges (id TEXT PRIMARY KEY, student_id TEXT NOT NULL, badge_key TEXT NOT NULL, badge_name TEXT NOT NULL, badge_emoji TEXT, badge_description TEXT, earned_at DATETIME DEFAULT CURRENT_TIMESTAMP, UNIQUE(student_id, badge_key));`); } catch (e) {}
+  try { db.exec(`CREATE TABLE IF NOT EXISTS student_badges (id TEXT PRIMARY KEY, student_id TEXT NOT NULL, badge_key TEXT NOT NULL, badge_name TEXT NOT NULL, badge_description TEXT, badge_xp INTEGER DEFAULT 0, badge_tier INTEGER DEFAULT 1, badge_emoji TEXT, earned_at DATETIME DEFAULT CURRENT_TIMESTAMP, UNIQUE(student_id, badge_key));`); } catch (e) {}
   try { db.exec(`CREATE INDEX IF NOT EXISTS idx_student_badges_student ON student_badges(student_id);`); } catch (e) {}
+  // Column migrations for existing badge tables
+  try { db.exec(`ALTER TABLE student_badges ADD COLUMN badge_description TEXT;`); } catch (e) {}
+  try { db.exec(`ALTER TABLE student_badges ADD COLUMN badge_xp INTEGER DEFAULT 0;`); } catch (e) {}
+  try { db.exec(`ALTER TABLE student_badges ADD COLUMN badge_tier INTEGER DEFAULT 1;`); } catch (e) {}
   console.log('Database tables initialized successfully with foreign keys and WAL mode.');
 }
 

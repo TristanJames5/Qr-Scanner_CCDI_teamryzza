@@ -202,20 +202,30 @@ export const StudentDashboard = () => {
           {/* Badges Preview */}
           <div className="glass-card p-6 rounded-2xl border border-blue-500/30">
             <div className="flex justify-between items-center mb-4">
-              <div className="text-xs font-bold uppercase tracking-wider text-blue-400 flex items-center gap-1.5"><Award className="w-4 h-4" /> Recent Badges</div>
-              <Link to="/student/leaderboard" className="text-xs text-blue-400 hover:text-blue-300">View All →</Link>
+              <div className="text-xs font-bold uppercase tracking-wider text-blue-400 flex items-center gap-1.5"><Award className="w-4 h-4" /> Badges</div>
+              <Link to="/student/badges" className="text-xs text-blue-400 hover:text-blue-300">View All →</Link>
             </div>
-            <div className="flex gap-3 overflow-x-auto pb-2 scrollbar-hide">
-              {gamification.badges?.length > 0 ? (
-                gamification.badges.slice(0, 4).map(b => (
-                  <div key={b.badge_key} className="flex-shrink-0 text-center" title={b.badge_name}>
-                    <div className="w-12 h-12 bg-slate-800 rounded-full flex items-center justify-center text-2xl border border-slate-700 shadow-lg shadow-black/50 mx-auto">
-                      {b.badge_emoji}
-                    </div>
-                  </div>
-                ))
-              ) : (
-                <div className="text-xs text-slate-500 w-full text-center py-2">No badges earned yet.</div>
+            {/* Progress bar */}
+            <div className="text-3xl font-black text-white mb-1">
+              {gamification.earnedCount ?? 0}
+              <span className="text-slate-500 text-base font-medium ml-1">/ {gamification.totalBadges ?? 200}</span>
+            </div>
+            <div className="text-blue-400 text-xs mb-3">Badges Earned</div>
+            <div className="w-full bg-slate-800 h-2 rounded-full overflow-hidden">
+              <div
+                className="bg-gradient-to-r from-blue-500 to-indigo-400 h-full rounded-full transition-all duration-700"
+                style={{ width: `${Math.round(((gamification.earnedCount ?? 0) / (gamification.totalBadges ?? 200)) * 100)}%` }}
+              />
+            </div>
+            {/* Recent earned badges */}
+            <div className="flex gap-2 mt-3 overflow-x-auto pb-1 scrollbar-hide">
+              {gamification.earnedBadges?.slice(0, 5).map(b => (
+                <div key={b.badge_key} className="flex-shrink-0 w-10 h-10 bg-indigo-500/20 border border-indigo-500/30 rounded-full flex items-center justify-center text-base" title={b.badge_name}>
+                  🏅
+                </div>
+              ))}
+              {(!gamification.earnedBadges || gamification.earnedBadges.length === 0) && (
+                <div className="text-xs text-slate-500 py-1">Scan QR to earn your first badge!</div>
               )}
             </div>
           </div>

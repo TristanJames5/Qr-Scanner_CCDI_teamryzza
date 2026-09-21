@@ -18,6 +18,7 @@ import { AdminDashboard } from './pages/admin/AdminDashboard';
 import { ManageUsersPage } from './pages/admin/ManageUsersPage';
 import { ManageSectionsPage } from './pages/admin/ManageSectionsPage';
 import { ActivePromptOverlay } from './components/student/ActivePromptOverlay';
+import { BadgesPage } from './components/student/BadgesPage';
 
 // Protected Route Wrapper
 const ProtectedRoute = ({ children, allowedRoles }) => {
@@ -68,6 +69,14 @@ export const App = () => {
             element={
               <ProtectedRoute allowedRoles={['student']}>
                 <StudentScanPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/student/badges"
+            element={
+              <ProtectedRoute allowedRoles={['student']}>
+                <BadgesPage />
               </ProtectedRoute>
             }
           />
