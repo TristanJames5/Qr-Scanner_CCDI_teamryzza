@@ -5,6 +5,8 @@ import { Navbar } from './components/common/Navbar';
 
 // Pages
 import { LoginPage } from './pages/LoginPage';
+import { RegisterStudentPage } from './pages/RegisterStudentPage';
+import { RegisterStaffPage } from './pages/RegisterStaffPage';
 import { StudentDashboard } from './pages/student/StudentDashboard';
 import { StudentScanPage } from './pages/student/StudentScanPage';
 import { InstructorDashboard } from './pages/instructor/InstructorDashboard';
@@ -19,6 +21,7 @@ import { ManageUsersPage } from './pages/admin/ManageUsersPage';
 import { ManageSectionsPage } from './pages/admin/ManageSectionsPage';
 import { ActivePromptOverlay } from './components/student/ActivePromptOverlay';
 import { BadgesPage } from './components/student/BadgesPage';
+import { ErrorBoundary } from './components/common/ErrorBoundary';
 
 // Protected Route Wrapper
 const ProtectedRoute = ({ children, allowedRoles }) => {
@@ -54,6 +57,8 @@ export const App = () => {
         <ActivePromptOverlay />
         <Routes>
           <Route path="/login" element={<LoginPage />} />
+          <Route path="/register/student" element={<RegisterStudentPage />} />
+          <Route path="/register/staff" element={<RegisterStaffPage />} />
 
           {/* Student Routes */}
           <Route
