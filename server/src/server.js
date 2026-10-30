@@ -43,14 +43,21 @@ const PORT = process.env.PORT || 5000;
 const CLIENT_URL = process.env.CLIENT_URL || 'http://localhost:5173';
 const allowedOrigins = CLIENT_URL.split(',').map(o => o.trim());
 
+// Helper function to validate allowed CORS origins
+const isOriginAllowed = (origin) => {
+  if (!origin) return true; // Server-to-server or curl
+  if (allowedOrigins.includes(origin)) return true;
+  if (origin.endsWith('.vercel.app')) return true; // Vercel preview & production deployments
+  if (origin.endsWith('.onrender.com')) return true; // Render internal/external URLs
+  if (process.env.RENDER_EXTERNAL_URL && origin === process.env.RENDER_EXTERNAL_URL) return true;
+  return false;
+};
+
 // Initialize Socket.io with strict CORS
 const io = new Server(server, {
   cors: {
     origin: (origin, callback) => {
-      if (!origin) return callback(null, true);
-      if (allowedOrigins.includes(origin)) return callback(null, true);
-      if (process.env.RENDER_EXTERNAL_URL && origin === process.env.RENDER_EXTERNAL_URL) return callback(null, true);
-      if (origin.endsWith('.onrender.com')) return callback(null, true);
+      if (isOriginAllowed(origin)) return callback(null, true);
       callback(new Error(`Socket CORS blocked: ${origin}`));
     },
     methods: ['GET', 'POST']
@@ -67,19 +74,10 @@ app.use(requestIdMiddleware);
 // contentSecurityPolicy disabled to allow React SPA served from same origin
 app.use(helmet({ contentSecurityPolicy: false }));
 
-// 3. Strict CORS — whitelist from CLIENT_URL env var, plus dynamic Render URLs
+// 3. Strict CORS — whitelist from CLIENT_URL env var, plus dynamic Vercel and Render URLs
 app.use(cors({
   origin: (origin, callback) => {
-    // Allow server-to-server requests (no origin header)
-    if (!origin) return callback(null, true);
-    
-    // Allow explicitly whitelisted origins
-    if (allowedOrigins.includes(origin)) return callback(null, true);
-    
-    // Dynamically allow the Render deployment URL if running on Render
-    if (process.env.RENDER_EXTERNAL_URL && origin === process.env.RENDER_EXTERNAL_URL) return callback(null, true);
-    if (origin.endsWith('.onrender.com')) return callback(null, true);
-
+    if (isOriginAllowed(origin)) return callback(null, true);
     callback(new Error(`CORS blocked: ${origin}`));
   },
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH'],

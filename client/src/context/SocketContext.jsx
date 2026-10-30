@@ -12,7 +12,11 @@ export const SocketProvider = ({ children }) => {
   const [promptLeaderboard, setPromptLeaderboard] = useState(null);
 
   useEffect(() => {
-    const newSocket = io(window.location.origin, {
+    // Determine socket URL: prefer VITE_SOCKET_URL, or strip /api from VITE_API_URL, or use window.location.origin
+    const socketEndpoint = import.meta.env.VITE_SOCKET_URL || 
+      (import.meta.env.VITE_API_URL ? import.meta.env.VITE_API_URL.replace(/\/api\/?$/, '') : window.location.origin);
+
+    const newSocket = io(socketEndpoint, {
       transports: ['websocket', 'polling'],
       reconnectionAttempts: 10,
       reconnectionDelay: 1000
