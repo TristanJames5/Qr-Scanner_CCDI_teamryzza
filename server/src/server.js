@@ -114,6 +114,16 @@ seedDatabase();
 // S-Class: Start background cron jobs (Early Warning System, etc.)
 initCronJobs();
 
+// Root endpoint for API inspection
+app.get('/', (req, res) => {
+  res.json({
+    name: 'CCDI QRScan API & Real-time Server',
+    status: 'online',
+    healthCheck: '/api/health',
+    timestamp: new Date().toISOString()
+  });
+});
+
 // ── Health / Readiness Probe ────────────────────────────────────────────────
 // Real DB ping — not a stub. Load balancers and Render use this to decide
 // whether your container is healthy and ready to serve traffic.
